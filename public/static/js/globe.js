@@ -4,9 +4,11 @@
 import { Bubbles } from "./bubbles.js";
 import { BOUNDS, bordersCanvas, countyAt, highlightCanvas, loadCounties } from "./geo.js";
 
-const HOME = { lon: 120.95, lat: 23.65, heading: -12, pitch: -42, range: 560000 };
-// What the 2D map frames: the main island with Penghu, Kinmen and Matsu.
-const TAIWAN_2D = [117.9, 21.7, 122.6, 26.5];
+// The camera aims south of the island's centre so Taiwan sits above the dock.
+const HOME = { lon: 120.95, lat: 23.15, heading: -12, pitch: -42, range: 600000 };
+// What the 2D map frames: the main island with Penghu, Kinmen and Matsu, and
+// extra sea to the south so the dock does not cover the southern tip.
+const TAIWAN_2D = [117.9, 21.0, 122.6, 26.5];
 const EXAGGERATION = 2.5;
 
 // Bubble anchors inside each county, spread so the crowded north and the
@@ -236,6 +238,20 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   flyHome(0);
   pickBorders();
 
+  let switching = false;
+  // Resolves when the globe has its tiles, or after `limit` ms, whichever is first.
+  const tilesSettled = (limit) => new Promise((resolve) => {
+    const started = performance.now();
+    const check = () => {
+      if (scene.globe.tilesLoaded || performance.now() - started > limit) {
+        scene.postRender.removeEventListener(check);
+        resolve();
+      }
+    };
+    scene.postRender.addEventListener(check);
+    scene.requestRender();
+  });
+
   const firstTiles = new Promise((resolve) => {
     const started = performance.now();
     const check = () => {
@@ -317,17 +333,36 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       scene.requestRender();
     },
 
-    // A morph resets the camera to the whole globe, so frame Taiwan once it lands.
-    setMode2D(on) {
-      const land = () => {
-        scene.morphComplete.removeEventListener(land);
+    // Cesium's morph animates out to the whole globe and would then have to
+    // jump back to Taiwan. Instead the view dissolves: fade out, morph and
+    // frame Taiwan while hidden, wait for tiles, fade back in.
+    async setMode2D(on) {
+      if (switching || (on === (scene.mode === Cesium.SceneMode.SCENE2D))) return;
+      switching = true;
+      const layers = [element, bubbles.layer];
+      const motion = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const fade = (keyframes, duration) => Promise.all(layers.map((layer) =>
+        layer.animate(keyframes, { duration, easing: "cubic-bezier(.4, 0, .2, 1)", fill: "forwards" }).finished));
+      try {
+        if (motion) await fade([{ opacity: 1, transform: "scale(1)", filter: "blur(0)" }, { opacity: 0, transform: "scale(0.97)", filter: "blur(6px)" }], 260);
+        await new Promise((resolve) => {
+          const landed = () => {
+            scene.morphComplete.removeEventListener(landed);
+            resolve();
+          };
+          scene.morphComplete.addEventListener(landed);
+          if (on) scene.morphTo2D(0);
+          else scene.morphTo3D(0);
+        });
         if (on) viewer.camera.setView({ destination: Cesium.Rectangle.fromDegrees(...TAIWAN_2D) });
         else flyHome(0);
+        await tilesSettled(700);
+        if (motion) await fade([{ opacity: 0, transform: "scale(1.03)", filter: "blur(6px)" }, { opacity: 1, transform: "scale(1)", filter: "blur(0)" }], 460);
+      } finally {
+        for (const layer of layers) layer.getAnimations().forEach((animation) => animation.cancel());
+        switching = false;
         scene.requestRender();
-      };
-      scene.morphComplete.addEventListener(land);
-      if (on) scene.morphTo2D(0.8);
-      else scene.morphTo3D(0.8);
+      }
     },
   };
 }

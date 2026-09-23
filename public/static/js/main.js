@@ -262,12 +262,20 @@ $("shadows").addEventListener("click", (event) => {
   event.currentTarget.setAttribute("aria-pressed", String(on));
   state.globe?.setShadows(on);
 });
-$("mode").addEventListener("click", (event) => {
-  const on = event.currentTarget.getAttribute("aria-pressed") !== "true";
-  event.currentTarget.setAttribute("aria-pressed", String(on));
-  event.currentTarget.textContent = on ? "3D" : "2D";
-  event.currentTarget.setAttribute("aria-label", on ? "3D 檢視" : "2D 檢視");
-  state.globe?.setMode2D(on);
+$("mode").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  if (!state.globe || button.disabled) return;
+  const on = button.getAttribute("aria-pressed") !== "true";
+  // The button offers the other mode, and waits out the dissolve.
+  button.disabled = true;
+  button.setAttribute("aria-pressed", String(on));
+  button.textContent = on ? "3D" : "2D";
+  button.setAttribute("aria-label", on ? "切換到 3D" : "切換到 2D");
+  try {
+    await state.globe.setMode2D(on);
+  } finally {
+    button.disabled = false;
+  }
 });
 $("home").addEventListener("click", () => state.globe?.flyHome());
 
