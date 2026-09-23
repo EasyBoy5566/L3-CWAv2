@@ -79,6 +79,14 @@ def map_layer():
     return _cached(queries.map_layer(database, layer, day), 60)
 
 
+@bp.get("/stations")
+def stations():
+    """Latest temperature at every station, for the globe's heat map."""
+    database = get_database()
+    freshness.refresh_observations_if_stale(database)
+    return _cached(queries.station_temperatures(database), 60)
+
+
 @bp.get("/region")
 def region():
     name = _county(request.args.get("name", ""))

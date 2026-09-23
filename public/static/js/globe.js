@@ -1,12 +1,14 @@
-// The 3D Taiwan: terrain, sun and moon at their real positions, and 22
-// clickable county polygons coloured by the active weather layer.
+// The 3D Taiwan: terrain, the sun and moon at their real positions, county
+// borders and a temperature field draped as imagery, and glass value bubbles.
 /* global Cesium */
-import { MISSING, colorAt } from "./scale.js";
+import { Bubbles } from "./bubbles.js";
+import { BOUNDS, bordersCanvas, countyAt, highlightCanvas, loadCounties } from "./geo.js";
+import { heatmapCanvas } from "./heatmap.js";
 
-const FILL_ALPHA = 0.58;
 const HOME = { lon: 120.95, lat: 23.65, heading: -12, pitch: -42, range: 560000 };
+const EXAGGERATION = 2.5;
 
-// Label anchors inside each county, spread so the crowded north and the
+// Bubble anchors inside each county, spread so the crowded north and the
 // county/city pairs (Hsinchu, Chiayi) do not stack at the default view.
 // Counties not listed use CWA's representative point.
 const LABEL_POINTS = {
@@ -27,7 +29,13 @@ const LABEL_POINTS = {
   臺東縣: [22.95, 121.08],
 };
 
-const cssColor = (css, alpha) => Cesium.Color.fromCssColorString(css).withAlpha(alpha);
+// Imagery is lit with the globe, so draped overlays darken at night; these
+// brightness factors keep them readable after dark.
+const OVERLAY_BRIGHTNESS = { day: 1, dusk: 1.4, night: 1.8 };
+// The selection outline must glow at any hour, so it is lifted further.
+const HIGHLIGHT_BRIGHTNESS = { day: 1.2, dusk: 2.2, night: 3.4 };
+// Above this camera height the coarse border raster is shown; below, the fine one.
+const BORDER_SWITCH = 300000;
 
 function imagery(token) {
   if (token) return undefined; // Cesium ion default imagery
@@ -37,8 +45,16 @@ function imagery(token) {
   );
 }
 
-export async function createGlobe(element, { token, counties, onHover, onSelect }) {
+async function canvasLayer(viewer, canvas, bounds, index) {
+  const provider = await Cesium.SingleTileImageryProvider.fromUrl(canvas.toDataURL("image/png"), {
+    rectangle: Cesium.Rectangle.fromDegrees(bounds.west, bounds.south, bounds.east, bounds.north),
+  });
+  return viewer.imageryLayers.addImageryProvider(provider, index);
+}
+
+export async function createGlobe(element, { token, counties: countyList, onHover, onSelect }) {
   if (token) Cesium.Ion.defaultAccessToken = token;
+  const terrain = token ? Cesium.Terrain.fromWorldTerrain({ requestVertexNormals: true }) : undefined;
   const options = {
     animation: false,
     timeline: false,
@@ -58,15 +74,15 @@ export async function createGlobe(element, { token, counties, onHover, onSelect 
   };
   const baseLayer = imagery(token);
   if (baseLayer) options.baseLayer = baseLayer;
-  if (token) options.terrain = Cesium.Terrain.fromWorldTerrain({ requestVertexNormals: true });
+  if (terrain) options.terrain = terrain;
 
   const viewer = new Cesium.Viewer(element, options);
   const { scene } = viewer;
-  scene.verticalExaggeration = token ? 2.5 : 1;
+  const exaggeration = token ? EXAGGERATION : 1;
+  scene.verticalExaggeration = exaggeration;
   scene.globe.enableLighting = true;
   scene.globe.dynamicAtmosphereLighting = true;
   scene.globe.dynamicAtmosphereLightingFromSun = true;
-  scene.globe.depthTestAgainstTerrain = false;
   scene.moon.show = true;
   scene.sun.show = true;
   viewer.shadowMap.softShadows = true;
@@ -75,89 +91,122 @@ export async function createGlobe(element, { token, counties, onHover, onSelect 
   viewer.clock.currentTime = Cesium.JulianDate.now();
   viewer.clock.clockStep = Cesium.ClockStep.SYSTEM_CLOCK;
 
-  const coordinates = new Map(counties.map((c) => [c.name, [c.lat, c.lon]]));
-  const fills = new Map();
-  const highlights = new Map();
-  const labels = new Map();
+  // ---------- county geometry, borders and highlights ----------
+  const counties = await loadCounties();
+  // A single image has no mipmaps, so one border raster either aliases into
+  // dashes from afar or blurs up close. Two rasters, swapped by camera height.
+  const bordersFine = await canvasLayer(viewer, bordersCanvas(counties, 4096), BOUNDS);
+  const bordersCoarse = await canvasLayer(viewer, bordersCanvas(counties, 1400, 0.8), BOUNDS);
+  const overlays = [bordersFine, bordersCoarse];
+  const pickBorders = () => {
+    const far = viewer.camera.positionCartographic.height > BORDER_SWITCH;
+    if (bordersCoarse.show !== far) {
+      bordersCoarse.show = far;
+      bordersFine.show = !far;
+    }
+  };
+  bordersFine.show = false;
+  viewer.camera.changed.addEventListener(pickBorders);
+  viewer.camera.percentageChanged = 0.1;
+  const highlights = new Map(); // name → Promise<ImageryLayer>
+  const highlightLayers = [];
+  let sky = "night";
 
-  const source = await Cesium.GeoJsonDataSource.load("/static/geo/taiwan-counties.json", { clampToGround: true });
-  const outlines = new Cesium.CustomDataSource("outlines");
-  const now = Cesium.JulianDate.now();
-  for (const entity of source.entities.values) {
-    const name = entity.properties.name.getValue();
-    entity.polygon.material = cssColor(MISSING, FILL_ALPHA);
-    entity.polygon.outline = false;
-    if (!fills.has(name)) fills.set(name, []);
-    fills.get(name).push(entity);
+  const highlightLayer = (name) => {
+    if (!highlights.has(name)) {
+      const county = counties.find((c) => c.name === name);
+      highlights.set(name, (async () => {
+        const { canvas, bounds } = highlightCanvas(county);
+        const layer = await canvasLayer(viewer, canvas, bounds);
+        layer.show = false;
+        layer.brightness = HIGHLIGHT_BRIGHTNESS[sky];
+        highlightLayers.push(layer);
+        return layer;
+      })());
+    }
+    return highlights.get(name);
+  };
 
-    const ring = entity.polygon.hierarchy.getValue(now).positions;
-    const positions = [...ring, ring[0]];
-    outlines.entities.add({
-      polyline: { positions, clampToGround: true, width: 1.2, material: Cesium.Color.WHITE.withAlpha(0.5) },
-      properties: { name },
-    });
-    const highlight = outlines.entities.add({
-      show: false,
-      polyline: { positions, clampToGround: true, width: 3.5, material: Cesium.Color.fromCssColorString("#fde047") },
-      properties: { name },
-    });
-    if (!highlights.has(name)) highlights.set(name, []);
-    highlights.get(name).push(highlight);
-  }
-  await viewer.dataSources.add(source);
-  await viewer.dataSources.add(outlines);
-
-  for (const [name, [lat, lon]] of coordinates) {
-    const [labelLat, labelLon] = LABEL_POINTS[name] ?? [lat, lon];
-    labels.set(name, viewer.entities.add({
-      position: Cesium.Cartesian3.fromDegrees(labelLon, labelLat),
-      properties: { name },
-      label: {
-        text: name,
-        font: "600 14px 'Noto Sans TC', 'Microsoft JhengHei', sans-serif",
-        fillColor: Cesium.Color.WHITE,
-        outlineColor: Cesium.Color.fromCssColorString("#0b1220"),
-        outlineWidth: 4,
-        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        scaleByDistance: new Cesium.NearFarScalar(1.5e5, 1.15, 1.2e6, 0.62),
-        translucencyByDistance: new Cesium.NearFarScalar(3e6, 1, 6e6, 0),
-      },
-    }));
-  }
-
-  // ---------- interaction ----------
   let hovered = null;
   let selected = null;
-  const setHighlight = (name, on) => {
-    for (const entity of highlights.get(name) ?? []) entity.show = on;
+  const shown = new Set();
+  const refreshHighlights = async () => {
+    const wanted = new Set([hovered, selected].filter(Boolean));
+    for (const name of new Set([...wanted, ...shown])) {
+      const layer = await highlightLayer(name);
+      layer.show = wanted.has(name);
+    }
+    shown.clear();
+    wanted.forEach((name) => shown.add(name));
+    scene.requestRender();
+  };
+
+  // ---------- bubbles ----------
+  const anchors = new Map(countyList.map(({ name, lat, lon }) => {
+    const [aLat, aLon] = LABEL_POINTS[name] ?? [lat, lon];
+    return [name, { lat: aLat, lon: aLon }];
+  }));
+  const bubbles = new Bubbles(element.parentElement, viewer, anchors, {
+    onHover: (name, position) => {
+      hovered = name;
+      refreshHighlights();
+      onHover?.(name, position);
+    },
+    onSelect,
+  });
+
+  // Bubbles sit on the rendered (exaggerated) surface once terrain is ready.
+  const liftBubbles = async (provider) => {
+    const points = [...anchors].map(([, a]) => Cesium.Cartographic.fromDegrees(a.lon, a.lat));
+    try {
+      await Cesium.sampleTerrainMostDetailed(provider, points);
+      bubbles.setHeights([...anchors.keys()].map((name, i) => [name, (points[i].height || 0) * exaggeration + 150]));
+    } catch (error) {
+      console.warn("terrain heights unavailable", error);
+    }
+  };
+  if (terrain) terrain.readyEvent.addEventListener(liftBubbles);
+
+  // ---------- picking by position, not by primitive ----------
+  const lonLatAt = (position) => {
+    const cartesian = scene.mode === Cesium.SceneMode.SCENE3D
+      ? scene.globe.pick(viewer.camera.getPickRay(position), scene)
+      : viewer.camera.pickEllipsoid(position);
+    if (!cartesian) return null;
+    const c = Cesium.Cartographic.fromCartesian(cartesian);
+    return [Cesium.Math.toDegrees(c.longitude), Cesium.Math.toDegrees(c.latitude)];
   };
   const nameAt = (position) => {
-    const picked = scene.pick(position);
-    const entity = picked?.id;
-    return entity?.properties?.name?.getValue?.() ?? null;
+    const point = lonLatAt(position);
+    return point ? countyAt(counties, point[0], point[1]) : null;
   };
 
   const handler = new Cesium.ScreenSpaceEventHandler(scene.canvas);
+  let pending = null;
   handler.setInputAction((movement) => {
-    const name = nameAt(movement.endPosition);
-    if (name !== hovered) {
-      if (hovered && hovered !== selected) setHighlight(hovered, false);
-      hovered = name;
-      if (name) setHighlight(name, true);
-      scene.canvas.style.cursor = name ? "pointer" : "";
-      scene.requestRender();
+    if (pending) {
+      pending = movement.endPosition;
+      return;
     }
-    onHover?.(name, movement.endPosition);
+    pending = movement.endPosition;
+    requestAnimationFrame(() => {
+      const position = pending;
+      pending = null;
+      const name = nameAt(position);
+      if (name !== hovered) {
+        hovered = name;
+        scene.canvas.style.cursor = name ? "pointer" : "";
+        refreshHighlights();
+      }
+      onHover?.(name, { x: position.x, y: position.y });
+    });
   }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
   handler.setInputAction((click) => {
     const name = nameAt(click.position);
-    // The canvas fills the viewport, so canvas coordinates are page coordinates.
     if (name) onSelect?.(name, { x: click.position.x, y: click.position.y });
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
+  // ---------- camera ----------
   const flyHome = (duration = 1.5) => {
     viewer.camera.flyToBoundingSphere(
       new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(HOME.lon, HOME.lat), 1),
@@ -168,6 +217,7 @@ export async function createGlobe(element, { token, counties, onHover, onSelect 
     );
   };
   flyHome(0);
+  pickBorders();
 
   const firstTiles = new Promise((resolve) => {
     const started = performance.now();
@@ -181,40 +231,58 @@ export async function createGlobe(element, { token, counties, onHover, onSelect 
     scene.requestRender();
   });
 
+  let heat = null;
+  let heatVersion = 0;
+
   return {
     viewer,
     ready: firstTiles,
     hasTerrain: Boolean(token),
 
     setValues(layer, values, scale) {
-      for (const [name, entities] of fills) {
-        const entry = values[name];
-        const value = entry?.value ?? null;
-        const color = cssColor(colorAt(scale, value), FILL_ALPHA);
-        for (const entity of entities) entity.polygon.material = color;
-        const label = labels.get(name)?.label;
-        if (label) {
-          const shown = value === null ? "—" : `${layer === "pop" ? Math.round(value) : Number(value).toFixed(layer === "now" ? 1 : 0)}${scale.unit}`;
-          label.text = `${name} ${shown}`;
-        }
+      bubbles.setValues(layer, values, scale);
+    },
+
+    /** Drape a temperature field from station readings; null removes it. */
+    async setHeatmap(stations) {
+      const version = ++heatVersion;
+      const previous = heat;
+      if (!stations?.length) {
+        heat = null;
+        if (previous) viewer.imageryLayers.remove(previous);
+        scene.requestRender();
+        return;
       }
+      const layer = await canvasLayer(viewer, heatmapCanvas(counties, stations), BOUNDS, 1);
+      if (version !== heatVersion) {
+        viewer.imageryLayers.remove(layer);
+        return;
+      }
+      layer.brightness = OVERLAY_BRIGHTNESS[sky];
+      heat = layer;
+      if (previous) viewer.imageryLayers.remove(previous);
       scene.requestRender();
     },
 
     select(name) {
-      if (selected && selected !== name) setHighlight(selected, false);
       selected = name;
-      if (name) setHighlight(name, true);
+      bubbles.select(name);
+      refreshHighlights();
+    },
+
+    setSky(next) {
+      sky = next;
+      for (const layer of [...overlays, heat].filter(Boolean)) layer.brightness = OVERLAY_BRIGHTNESS[sky];
+      for (const layer of highlightLayers) layer.brightness = HIGHLIGHT_BRIGHTNESS[sky];
       scene.requestRender();
     },
 
     flyTo(name, { panelOpen = false } = {}) {
-      const point = coordinates.get(name);
-      if (!point) return;
-      const [lat, lon] = LABEL_POINTS[name] ?? point;
+      const anchor = anchors.get(name);
+      if (!anchor) return;
       const range = 190000;
       viewer.camera.flyToBoundingSphere(
-        new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(lon, lat), 1),
+        new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(anchor.lon, anchor.lat), 1),
         {
           offset: new Cesium.HeadingPitchRange(viewer.camera.heading, Cesium.Math.toRadians(-45), range),
           duration: 1.4,
@@ -235,8 +303,7 @@ export async function createGlobe(element, { token, counties, onHover, onSelect 
         viewer.clock.shouldAnimate = false;
         viewer.clock.currentTime = Cesium.JulianDate.fromDate(date);
       } else {
-        viewer.creditDisplay.addStaticCredit(new Cesium.Credit("資料：中央氣象署開放資料 · 縣市界：內政部國土測繪中心", true));
-  viewer.clock.currentTime = Cesium.JulianDate.now();
+        viewer.clock.currentTime = Cesium.JulianDate.now();
         viewer.clock.shouldAnimate = true;
       }
       scene.requestRender();

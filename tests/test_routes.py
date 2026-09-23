@@ -43,7 +43,16 @@ def test_map_layers(client, loaded):
     assert "s-maxage=60" in response.headers["Cache-Control"]
 
 
-@pytest.mark.parametrize("url", ["/api/map?layer=wind", "/api/map?layer=maxt&date=tomorrow", f"/api/region/trend?name={TAICHUNG}&days=5"])
+def test_station_temperatures_for_heat_map(client, loaded, clock):
+    data = client.get("/api/stations").get_json()
+    assert len(data["stations"]) > 300
+    assert all(s["t"] is not None and 10 < s["lat"] < 27 for s in data["stations"])
+    assert data["observedAt"].endswith("+08:00")
+    clock(FROZEN + timedelta(hours=2))
+    assert client.get("/api/stations").get_json()["stations"] == []  # too old to map
+
+
+@pytest.mark.parametrize("url",["/api/map?layer=wind", "/api/map?layer=maxt&date=tomorrow", f"/api/region/trend?name={TAICHUNG}&days=5"])
 def test_bad_parameters(client, loaded, url):
     response = client.get(url)
     assert response.status_code == 400 and response.get_json()["error"]
