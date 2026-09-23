@@ -3,7 +3,7 @@ import { getJSON } from "./api.js";
 import { dayLabel, escapeHtml, hhmm, num } from "./format.js";
 import { GlassSelect, Segmented, prefersReducedMotion, refract, setSky } from "./glass.js";
 import { createGlobe } from "./globe.js";
-import { renderFreshness, renderSky } from "./header.js";
+import { renderFreshness } from "./header.js";
 import { RegionView } from "./panel.js";
 import { SECTIONS, TownData } from "./town-data.js";
 import { MISSING, colorAt, renderLegend, scaleFor } from "./scale.js";
@@ -110,9 +110,7 @@ function hidePanel() {
 
 const regionUrl = (county, town) => `/?${new URLSearchParams(town ? { region: county, town: town.town } : { region: county })}`;
 
-function enabledSections() {
-  return [...document.querySelectorAll("#town-sections input:checked")].map((input) => input.dataset.section);
-}
+const ALL_SECTIONS = Object.keys(SECTIONS);
 
 function showTown(town) {
   state.town = town;
@@ -121,13 +119,7 @@ function showTown(town) {
     state.view?.hideTown();
     return;
   }
-  state.view?.showTown(town, townData, enabledSections(), {
-    onClose: () => {
-      state.town = null;
-      state.globe?.select(state.region);
-      history.pushState({}, "", regionUrl(state.region));
-    },
-  });
+  state.view?.showTown(town, townData, ALL_SECTIONS);
 }
 
 // A township click keeps the camera where it is: the user is already close.
@@ -237,54 +229,6 @@ function setOverlayStatus(name, text, { error = false, busy = false } = {}) {
   row.classList.toggle("busy", busy);
 }
 
-$("town-borders").addEventListener("change", (event) => state.globe?.setTownBorders(event.target.checked));
-
-// ---------- township card sections ----------
-const SECTION_KEY = "town-sections";
-
-function countSections() {
-  const on = enabledSections().length;
-  $("section-count").textContent = ` · ${on}/${Object.keys(SECTIONS).length}`;
-}
-
-try {
-  const saved = JSON.parse(localStorage.getItem(SECTION_KEY) ?? "null");
-  if (Array.isArray(saved)) {
-    for (const input of document.querySelectorAll("#town-sections input")) input.checked = saved.includes(input.dataset.section);
-  }
-} catch {
-  // Private windows may refuse storage; every section stays on.
-}
-countSections();
-
-$("town-sections").addEventListener("change", () => {
-  countSections();
-  try {
-    localStorage.setItem(SECTION_KEY, JSON.stringify(enabledSections()));
-  } catch {
-    // Not remembered; the choice still applies now.
-  }
-  if (state.town) showTown(state.town);
-});
-
-$("overlays").addEventListener("change", async (event) => {
-  const input = event.target.closest("input[data-overlay]");
-  if (!input || !state.globe) return;
-  const name = input.dataset.overlay;
-  if (!input.checked) {
-    await state.globe.setOverlay(name, false);
-    setOverlayStatus(name, "");
-    return;
-  }
-  setOverlayStatus(name, "載入中…", { busy: true });
-  try {
-    const status = await state.globe.setOverlay(name, true);
-    if (input.checked) setOverlayStatus(name, status);
-  } catch (error) {
-    input.checked = false;
-    setOverlayStatus(name, error.message, { error: true });
-  }
-});
 
 // ---------- 3D: buildings and the shadow simulation ----------
 $("buildings").addEventListener("change", async (event) => {
@@ -297,7 +241,6 @@ $("buildings").addEventListener("change", async (event) => {
   }
 });
 
-if (window.innerHeight < 820) $("group-town").open = false;
 
 const simCities = new Segmented($("sim-cities"), {
   onChange: (city) => {
@@ -313,10 +256,7 @@ async function setSimulation(on) {
   $("sim-cities").hidden = !on;
   if (on) {
     simCities.place(false);
-    // Make room for the city picker: fold the overlay list if the card would overflow.
     $("group-3d").open = true;
-    const card = document.querySelector(".controls");
-    if (card.scrollHeight > card.clientHeight) $("group-town").open = false;
     $("sim-cities").scrollIntoView({ block: "nearest", behavior: "smooth" });
     $("buildings").checked = true;
     if (state.region) closeRegion();
@@ -514,7 +454,6 @@ async function poll() {
 async function start() {
   syncSliderToNow();
   refract();
-  renderSky($("sky"));
   try {
     state.dataStamp = await loadMeta();
   } catch (error) {

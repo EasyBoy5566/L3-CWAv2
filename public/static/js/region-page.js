@@ -1,7 +1,7 @@
 // The standalone /region?name=<縣市> page: the same view as the globe's panel.
 import { getJSON } from "./api.js";
 import { refract, setSky } from "./glass.js";
-import { renderFreshness, renderSky } from "./header.js";
+import { renderFreshness } from "./header.js";
 import { RegionView } from "./panel.js";
 
 const POLL_MS = 3 * 60 * 1000;
@@ -25,7 +25,6 @@ async function poll() {
 
 setSky();
 refract();
-renderSky(document.getElementById("sky"), name);
 view.load();
 poll();
 setInterval(poll, POLL_MS);

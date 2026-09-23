@@ -1,27 +1,19 @@
-// The top bar: today's sun and moon, and how fresh the data is.
-import { getJSON } from "./api.js";
-import { ago, escapeHtml, hhmm, moonPhase, todayInTaipei } from "./format.js";
+// The top bar's data status: one capsule saying whether the data is current,
+// with the observation and forecast times in its tooltip.
+import { ago, escapeHtml, hhmm } from "./format.js";
 
-export async function renderSky(element, county = "臺北市") {
-  const phase = moonPhase();
-  try {
-    const { times } = await getJSON(`/api/astro?county=${encodeURIComponent(county)}&date=${todayInTaipei()}`);
-    if (!times) throw new Error("no data");
-    element.innerHTML = `
-      <span>☀ 日出 <b>${escapeHtml(times.sunrise ?? "—")}</b> 日落 <b>${escapeHtml(times.sunset ?? "—")}</b></span>
-      <span>☾ ${phase.name} · 月出 <b>${escapeHtml(times.moonrise ?? "—")}</b> 月落 <b>${escapeHtml(times.moonset ?? "—")}</b></span>
-      <span>${escapeHtml(county)}</span>`;
-  } catch {
-    element.innerHTML = `<span>☾ ${phase.name}</span>`;
-  }
-}
-
-const LEVEL_TEXT = { ok: "", warn: "（延遲）", alert: "（過期）", missing: "（無資料）" };
+const SEVERITY = { ok: 0, warn: 1, missing: 2, alert: 2 };
+const LABEL = { ok: "資料即時", warn: "資料延遲", missing: "資料異常", alert: "資料異常" };
 
 export function renderFreshness(element, freshness) {
   const obs = freshness.observations;
   const fc = freshness.forecasts;
-  element.innerHTML = `
-    <span class="badge ${obs.level}" title="${escapeHtml(obs.lastError ?? "")}">觀測 ${hhmm(obs.dataTime)} · ${ago(obs.dataTime)}${LEVEL_TEXT[obs.level]}</span>
-    <span class="badge ${fc.level}" title="${escapeHtml(fc.lastError ?? "")}">預報 ${hhmm(fc.dataTime)}${LEVEL_TEXT[fc.level]}</span>`;
+  const level = SEVERITY[obs.level] >= SEVERITY[fc.level] ? obs.level : fc.level;
+  const detail = [
+    `觀測 ${hhmm(obs.dataTime)}（${ago(obs.dataTime)}）`,
+    `預報 ${hhmm(fc.dataTime)} 取得`,
+    obs.lastError ? `觀測錯誤：${obs.lastError}` : "",
+    fc.lastError ? `預報錯誤：${fc.lastError}` : "",
+  ].filter(Boolean).join("\n");
+  element.innerHTML = `<span class="badge ${level}" title="${escapeHtml(detail)}">${LABEL[level]}</span>`;
 }

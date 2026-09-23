@@ -3,7 +3,6 @@
 {% block head %}
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Widgets/widgets.css">
 {% endblock %}
-{% block topbar_extra %}<div class="legend top-legend" id="legend" aria-label="圖例"></div>{% endblock %}
 {% block content %}
 <main class="stage">
   <div id="globe" class="globe" aria-label="臺灣 3D 地圖"></div>
@@ -34,35 +33,11 @@
     <details class="group" id="group-map" open>
     <summary class="control-title">地圖圖層</summary>
     <div class="toggles" id="overlays">
-      <label class="toggle">
-        <input type="checkbox" id="town-borders" checked>
-        <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
-        <span class="toggle-text">鄉鎮界線<small>拉近後顯示 · 點選查看鄉鎮</small></span>
-      </label>
       <label class="toggle" data-overlay="typhoon">
         <input type="checkbox" data-overlay="typhoon">
         <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
         <span class="toggle-text">颱風路徑<small data-note="路徑與 70% 潛勢">路徑與 70% 潛勢</small></span>
       </label>
-    </div>
-    </details>
-
-    <details class="group" id="group-town" open>
-    <summary class="control-title">鄉鎮資料卡<span class="count" id="section-count"></span></summary>
-    <div class="toggles" id="town-sections">
-      {% for key, name, note in [
-        ("forecast", "鄉鎮預報", "逐時氣溫、天氣、降雨機率"),
-        ("heat", "熱傷害指數", "目前與 24 小時內最高"),
-        ("rain", "雨量站", "鄉鎮內最大累積雨量"),
-        ("stations", "氣象站觀測", "溫度範圍、濕度、陣風"),
-        ("uv", "紫外線", "當日最大值"),
-      ] %}
-      <label class="toggle">
-        <input type="checkbox" data-section="{{ key }}" checked>
-        <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
-        <span class="toggle-text">{{ name }}<small>{{ note }}</small></span>
-      </label>
-      {% endfor %}
     </div>
     </details>
 
@@ -84,6 +59,8 @@
       <button type="button" role="radio" data-value="taichung" aria-checked="false">臺中七期</button>
     </div>
     </details>
+
+    <div class="legend card-legend" id="legend" aria-label="圖例"></div>
   </aside>
 
   <div class="dock glass" data-refract="44" role="toolbar" aria-label="日期、時間與檢視">

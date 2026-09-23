@@ -118,8 +118,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   const towns = await loadTowns();
   const townBorders = await canvasLayer(viewer, townBordersCanvas(towns), BOUNDS, 1);
   const overlays = [bordersFine, bordersCoarse, townBorders];
-  let townsEnabled = true;
-  const townLevel = () => townsEnabled && viewer.camera.positionCartographic.height < TOWN_LEVEL;
+  const townLevel = () => viewer.camera.positionCartographic.height < TOWN_LEVEL;
   const pickBorders = () => {
     const far = viewer.camera.positionCartographic.height > BORDER_SWITCH;
     if (bordersCoarse.show !== far) {
@@ -135,15 +134,16 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   const highlightLayers = [];
   let sky = "night";
 
+  const built = new Map(); // name → ImageryLayer, once its raster exists
   const highlightLayer = (name) => {
     if (!highlights.has(name)) {
       const feature = counties.find((c) => c.name === name) ?? towns.find((t) => t.name === name);
       highlights.set(name, (async () => {
         const { canvas, bounds } = highlightCanvas(feature);
         const layer = await canvasLayer(viewer, canvas, bounds);
-        layer.show = false;
         layer.brightness = HIGHLIGHT_BRIGHTNESS[sky];
         highlightLayers.push(layer);
+        built.set(name, layer);
         return layer;
       })());
     }
@@ -152,15 +152,13 @@ export async function createGlobe(element, { token, counties: countyList, onHove
 
   let hovered = null;
   let selected = null;
-  const shown = new Set();
+  // Rasters are built asynchronously, so a slow one can land after the pointer
+  // has moved on. Visibility is therefore decided from the state at the end,
+  // over every built layer: exactly the hovered and selected ones glow.
   const refreshHighlights = async () => {
+    await Promise.all([hovered, selected].filter(Boolean).map(highlightLayer));
     const wanted = new Set([hovered, selected].filter(Boolean));
-    for (const name of new Set([...wanted, ...shown])) {
-      const layer = await highlightLayer(name);
-      layer.show = wanted.has(name);
-    }
-    shown.clear();
-    wanted.forEach((name) => shown.add(name));
+    for (const [name, layer] of built) layer.show = wanted.has(name);
     scene.requestRender();
   };
 
@@ -353,11 +351,6 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     setOverlay: (name, on) => dataLayers.set(name, on),
     refreshOverlays: () => dataLayers.refresh(),
 
-    setTownBorders(on) {
-      townsEnabled = on;
-      pickBorders();
-      scene.requestRender();
-    },
     town: (county, name) => towns.find((t) => t.county === county && t.town === name) ?? null,
 
     setBuildings,

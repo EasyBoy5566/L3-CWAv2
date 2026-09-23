@@ -4,12 +4,16 @@ export async function getJSON(url, { signal } = {}) {
   let body = null;
   try {
     body = await response.json();
-  } catch {
-    // Non-JSON error pages fall through to the status text below.
+  } catch (error) {
+    // An abort while the body streams must reach the caller as an abort, not
+    // as an empty payload that looks like success. Non-JSON error pages fall
+    // through to the status text below.
+    if (error.name === "AbortError") throw error;
   }
   if (!response.ok) {
     throw new Error(body?.error || `伺服器回應 ${response.status}`);
   }
+  if (body === null) throw new Error("伺服器回應的格式不正確。");
   return body;
 }
 

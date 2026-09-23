@@ -84,7 +84,7 @@ function summarise(section, rows, loaded, town) {
       if (!rows.length) return { count: 0 };
       const wettest = rows.reduce((a, b) => ((b.r24h ?? -1) > (a.r24h ?? -1) ? b : a));
       const max = (field) => Math.max(...rows.map((r) => r[field] ?? 0));
-      return { count: rows.length, r10m: max("r10m"), r1h: max("r1h"), r24h: max("r24h"), r3d: max("r3d"), wettest, time: rows[0].time };
+      return { count: rows.length, r10m: max("r10m"), r1h: max("r1h"), r3h: max("r3h"), r24h: max("r24h"), r3d: max("r3d"), wettest, time: rows[0].time };
     }
     case "stations": {
       const reporting = rows.filter((r) => r.t !== null);
@@ -98,7 +98,7 @@ function summarise(section, rows, loaded, town) {
         tmax: Math.max(...temperatures),
         rh: humidities.length ? humidities[Math.floor(humidities.length / 2)] : null,
         gust: gusts.length ? Math.max(...gusts) : null,
-        list: [...reporting].sort((a, b) => (a.alt ?? 0) - (b.alt ?? 0)).slice(0, 6),
+        list: [...reporting].sort((a, b) => (a.alt ?? 0) - (b.alt ?? 0)).slice(0, 8),
         time: reporting[0].time,
       };
     }

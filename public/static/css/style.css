@@ -284,8 +284,6 @@ input[type="range"]::-moz-range-thumb {
 }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; color: var(--text); text-decoration: none; white-space: nowrap; }
 .brand-sun { width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 40% 40%, #fef3c7, #f59e0b); box-shadow: 0 0 14px rgba(251, 191, 36, 0.8); }
-.sky { display: flex; gap: 16px; color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; }
-.sky b { color: var(--text); font-weight: 600; }
 .freshness { margin-left: auto; display: flex; gap: 6px; }
 .badge {
   display: inline-flex;
@@ -351,12 +349,10 @@ input[type="range"]::-moz-range-thumb {
 .controls .field { display: grid; gap: 8px; }
 .controls select { width: 100%; }
 
-/* The layer's colour scale, set in the top bar between the sky and the data times. */
-.top-legend { display: flex; align-items: center; gap: 10px; margin-left: auto; }
-.top-legend + .freshness { margin-left: 12px; }
-.legend-title { font-size: 12px; color: var(--muted); white-space: nowrap; }
-.legend-scale { display: grid; gap: 2px; width: 170px; }
-.legend-bar { display: block; height: 6px; border-radius: 3px; box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.3); }
+/* The layer's colour scale, closing the controls card for reference. */
+.card-legend { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--inner-line); }
+.legend-scale { display: grid; gap: 3px; }
+.legend-bar { display: block; height: 7px; border-radius: 4px; box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.3); }
 .legend-ticks { display: flex; justify-content: space-between; font-size: 10px; line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* Bottom dock: date, the sun clock, and view buttons. It slides left when
@@ -657,7 +653,6 @@ body.page-region { background: transparent; }
 .empty-state { margin: 80px auto; max-width: 520px; padding: 40px; text-align: center; }
 
 @media (max-width: 1100px) {
-  .sky { display: none; }
   .clock input { width: 150px; }
 }
 @media (max-width: 900px) {
@@ -873,14 +868,14 @@ body.page-region { background: transparent; }
 @keyframes unfold { from { opacity: 0; transform: translateY(-4px); } }
 
 /* ---------- township card, above the county hero ---------- */
-.town-card { margin-top: 18px; padding: 12px 14px 14px; gap: 12px; border-radius: 24px; animation: town-in 0.4s var(--ease); }
+.town-card { margin-top: 18px; padding: 14px 16px 16px; gap: 14px; border-radius: 24px; animation: town-in 0.4s var(--ease); }
 @keyframes town-in { from { opacity: 0; transform: translateY(-6px) scale(0.98); } }
 .town-card .skeleton.town-skeleton { height: 96px; }
-.town-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding-right: 40px; }
+.town-head { display: flex; align-items: baseline; gap: 10px; padding-right: 40px; }
 .town-head h3 { font-size: 22px; font-weight: 600; letter-spacing: 0.03em; }
 .town-head span { font-size: 12px; color: var(--muted); }
-.town-head .icon-btn { min-width: 30px; height: 30px; font-size: 18px; background: var(--inner); }
-.town-now { display: flex; align-items: center; gap: 16px; }
+
+.town-now { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; }
 .town-temp {
   font-family: "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   font-size: 52px;
@@ -892,24 +887,33 @@ body.page-region { background: transparent; }
   color: transparent;
   text-shadow: none;
 }
-.town-wx { display: grid; gap: 2px; }
+.town-wx { display: grid; gap: 2px; min-width: 0; }
 .town-wx > div { display: flex; align-items: center; gap: 6px; font-size: 16px; }
 .town-wx small { color: var(--muted); font-size: 12px; }
-.town-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.town-chips .chip { border: 0; gap: 4px; padding: 5px 12px; }
-.town-chips .chip b { font-size: 14px; }
+.town-chips { display: grid; gap: 6px; justify-items: stretch; }
+.town-chips .chip { display: grid; grid-template-columns: auto auto; align-items: baseline; justify-content: space-between; column-gap: 8px; padding: 5px 12px; border: 0; }
+.town-chips .chip small { font-size: 11px; color: var(--muted); }
+.town-chips .chip b { font-size: 16px; font-variant-numeric: tabular-nums; }
+.town-chips .chip b + small { grid-column: 1 / -1; text-align: right; margin-top: -2px; }
 .town-chips .chip.warn { background: linear-gradient(135deg, rgba(251, 146, 60, 0.35), rgba(251, 146, 60, 0.12)); }
 .town-chips .chip.alert { background: linear-gradient(135deg, rgba(239, 68, 68, 0.45), rgba(239, 68, 68, 0.15)); }
-.town-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.town-stat { display: grid; gap: 2px; align-content: start; padding: 10px 12px; border-radius: 16px; background: rgba(255, 255, 255, 0.06); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12); }
-.town-stat .label { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); }
-.town-stat .label svg { width: 13px; height: 13px; }
-.town-stat b { font-size: 22px; font-weight: 400; font-variant-numeric: tabular-nums; }
-.town-stat b small { font-size: 11px; color: var(--muted); }
-.town-stat > small { font-size: 11.5px; line-height: 1.4; color: rgba(255, 255, 255, 0.72); }
-.town-stations { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; font-size: 13px; font-variant-numeric: tabular-nums; }
-.town-stations li { display: grid; grid-template-columns: 1fr auto auto 52px; align-items: baseline; gap: 10px; padding: 5px 8px; border-radius: 10px; }
-.town-stations li:nth-child(odd) { background: rgba(255, 255, 255, 0.04); }
-.town-stations small { color: var(--faint); font-size: 11px; }
-.town-stations em { color: var(--muted); font-style: normal; font-size: 12px; }
-.town-stations b { text-align: right; font-weight: 600; }
+
+.town-block { display: grid; gap: 8px; }
+.town-block-head { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.05em; color: var(--muted); }
+.town-block-head svg { width: 14px; height: 14px; }
+.town-block-head small { margin-left: auto; font-weight: 400; letter-spacing: 0; color: var(--faint); }
+
+.rain-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.rain-cell { display: grid; justify-items: center; gap: 2px; padding: 9px 4px 8px; border-radius: 14px; background: rgba(255, 255, 255, 0.05); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1); }
+.rain-cell b { font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.rain-cell span { font-size: 11px; color: var(--muted); }
+.rain-cell.wet b { color: #7dd3fc; }
+.rain-cell.main { background: linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.08)); box-shadow: inset 0 1px 0.5px rgba(255, 255, 255, 0.6), 0 3px 10px rgba(0, 0, 0, 0.2); }
+
+.town-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.town-table th { padding: 0 6px 6px; font-size: 11px; font-weight: 500; color: var(--faint); text-align: right; border-bottom: 1px solid var(--inner-line); }
+.town-table td { padding: 7px 6px; text-align: right; border-bottom: 1px solid rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.78); }
+.town-table th:first-child, .town-table td:first-child { text-align: left; }
+.town-table td:first-child { color: var(--text); }
+.town-table td.t { color: var(--text); font-weight: 600; }
+.town-table tr:last-child td { border-bottom: 0; }
