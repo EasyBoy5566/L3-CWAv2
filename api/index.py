@@ -1,5 +1,6 @@
-"""Vercel entry point. vercel.json rewrites every non-static path here, and
-Vercel's Python runtime serves the WSGI ``app`` it finds in this module."""
+"""Vercel entry point. Vercel's Flask support finds the WSGI ``app`` in this
+module and sends every request to it with the original path; files under
+public/ are served by the CDN before they reach Flask."""
 
 import pathlib
 import sys
