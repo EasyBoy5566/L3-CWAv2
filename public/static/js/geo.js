@@ -114,24 +114,3 @@ export function highlightCanvas(county, maxSide = 1400) {
   context.stroke();
   return { canvas, bounds };
 }
-
-/** Land pixels of a width×height grid over BOUNDS, as a Uint8Array mask. */
-export function landMask(counties, width, height) {
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext("2d");
-  const project = ([lon, lat]) => [
-    ((lon - BOUNDS.west) / (BOUNDS.east - BOUNDS.west)) * width,
-    ((BOUNDS.north - lat) / (BOUNDS.north - BOUNDS.south)) * height,
-  ];
-  context.fillStyle = "#fff";
-  for (const county of counties) {
-    tracePolygons(context, project, county.polygons);
-    context.fill("evenodd");
-  }
-  const pixels = context.getImageData(0, 0, width, height).data;
-  const mask = new Uint8Array(width * height);
-  for (let i = 0; i < mask.length; i += 1) mask[i] = pixels[i * 4 + 3];
-  return mask;
-}

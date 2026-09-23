@@ -74,19 +74,6 @@ export class ChartSet {
 
 const pair = (rows, x, y) => rows.filter((r) => r[y] !== null && r[y] !== undefined).map((r) => [r[x], r[y]]);
 
-export function hourlyOption(hourly) {
-  return base({
-    tooltip: { ...base().tooltip, axisPointer: { type: "line" } },
-    xAxis: timeAxis(),
-    yAxis: [valueAxis("°C"), valueAxis("降雨 %", { min: 0, max: 100, scale: false, splitLine: { show: false } })],
-    series: [
-      { name: "溫度", type: "line", smooth: true, showSymbol: false, data: pair(hourly, "time", "temperature"), itemStyle: { color: COLORS.temp }, lineStyle: { width: 2.5 } },
-      { name: "體感", type: "line", smooth: true, showSymbol: false, data: pair(hourly, "time", "apparentTemperature"), itemStyle: { color: COLORS.feels }, lineStyle: { type: "dashed", width: 1.5 } },
-      { name: "降雨機率", type: "bar", yAxisIndex: 1, data: pair(hourly, "time", "pop"), itemStyle: { color: COLORS.pop }, barMaxWidth: 8 },
-    ],
-  });
-}
-
 // Observed hourly temperature with each day's forecast low/high as markers.
 export function trendOption(trend) {
   const noon = (d) => `${d}T12:00:00+08:00`;

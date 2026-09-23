@@ -53,28 +53,6 @@ def current_counties(database) -> dict[str, dict]:
     return {row["county"]: row for row in rows}
 
 
-def station_temperatures(database) -> dict:
-    """Each station's newest temperature from the last 40 minutes, for the heat map."""
-    since = _iso(config.now() - timedelta(minutes=40))
-    rows = database.query(
-        "SELECT o.stationId, o.observedAt, o.temperature, s.lat, s.lon, s.altitude "
-        "FROM Observations o JOIN Stations s ON s.stationId = o.stationId "
-        "WHERE o.observedAt >= ? AND o.temperature IS NOT NULL",
-        (since,),
-    )
-    newest: dict[str, dict] = {}
-    for row in rows:
-        kept = newest.get(row["stationId"])
-        if kept is None or row["observedAt"] > kept["observedAt"]:
-            newest[row["stationId"]] = row
-    stations = [
-        {"lat": row["lat"], "lon": row["lon"], "alt": row["altitude"], "t": row["temperature"]}
-        for row in newest.values()
-    ]
-    observed_at = max((row["observedAt"] for row in newest.values()), default=None)
-    return {"observedAt": observed_at, "stations": stations}
-
-
 def forecast_for_date(database, day: str) -> dict[str, dict]:
     rows = database.query(
         "SELECT regionName, dataDate, mint, maxt, pop, wx, wxCode, approx, fetchedAt "
@@ -135,7 +113,7 @@ def region_detail(database, name: str) -> dict:
         (name, _day_start(today)),
     )
     hourly = database.query(
-        "SELECT time, temperature, apparentTemperature, humidity, comfort, pop, wx, wxCode, windSpeed, windDir "
+        "SELECT time, temperature, apparentTemperature, dewPoint, humidity, comfort, pop, wx, wxCode, windSpeed, windDir "
         "FROM HourlyForecasts WHERE runId = ? AND regionName = ? AND time >= ? ORDER BY time",
         (run_id, name, _iso(now - timedelta(hours=1))),
     ) if run_id else []

@@ -1,9 +1,8 @@
 // The 3D Taiwan: terrain, the sun and moon at their real positions, county
-// borders and a temperature field draped as imagery, and glass value bubbles.
+// borders draped as imagery, and glass value bubbles.
 /* global Cesium */
 import { Bubbles } from "./bubbles.js";
 import { BOUNDS, bordersCanvas, countyAt, highlightCanvas, loadCounties } from "./geo.js";
-import { heatmapCanvas } from "./heatmap.js";
 
 const HOME = { lon: 120.95, lat: 23.65, heading: -12, pitch: -42, range: 560000 };
 const EXAGGERATION = 2.5;
@@ -231,9 +230,6 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     scene.requestRender();
   });
 
-  let heat = null;
-  let heatVersion = 0;
-
   return {
     viewer,
     ready: firstTiles,
@@ -241,27 +237,6 @@ export async function createGlobe(element, { token, counties: countyList, onHove
 
     setValues(layer, values, scale) {
       bubbles.setValues(layer, values, scale);
-    },
-
-    /** Drape a temperature field from station readings; null removes it. */
-    async setHeatmap(stations) {
-      const version = ++heatVersion;
-      const previous = heat;
-      if (!stations?.length) {
-        heat = null;
-        if (previous) viewer.imageryLayers.remove(previous);
-        scene.requestRender();
-        return;
-      }
-      const layer = await canvasLayer(viewer, heatmapCanvas(counties, stations), BOUNDS, 1);
-      if (version !== heatVersion) {
-        viewer.imageryLayers.remove(layer);
-        return;
-      }
-      layer.brightness = OVERLAY_BRIGHTNESS[sky];
-      heat = layer;
-      if (previous) viewer.imageryLayers.remove(previous);
-      scene.requestRender();
     },
 
     select(name) {
@@ -272,7 +247,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
 
     setSky(next) {
       sky = next;
-      for (const layer of [...overlays, heat].filter(Boolean)) layer.brightness = OVERLAY_BRIGHTNESS[sky];
+      for (const layer of overlays) layer.brightness = OVERLAY_BRIGHTNESS[sky];
       for (const layer of highlightLayers) layer.brightness = HIGHLIGHT_BRIGHTNESS[sky];
       scene.requestRender();
     },

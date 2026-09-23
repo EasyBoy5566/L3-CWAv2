@@ -19,7 +19,6 @@ const state = {
   view: null,
   globe: null,
   dataStamp: null,
-  heat: true,
   simulated: null, // a Date while the sun clock is dragged, else null (live)
 };
 
@@ -42,20 +41,6 @@ async function loadLayer() {
   renderLegend($("legend"), scale);
   state.globe?.setValues(state.layer, state.values, scale);
   renderFallbackTiles();
-  loadHeatmap().catch(showError);
-}
-
-// The temperature field only exists for live readings: forecasts are per
-// county, too coarse to interpolate.
-async function loadHeatmap() {
-  $("heat-row").hidden = state.layer !== "now";
-  if (!state.globe) return;
-  if (state.layer !== "now" || !state.heat) {
-    await state.globe.setHeatmap(null);
-    return;
-  }
-  const { stations } = await getJSON("/api/stations");
-  if (state.layer === "now" && state.heat) await state.globe.setHeatmap(stations);
 }
 
 // ---------- panel ----------
@@ -220,10 +205,6 @@ $("date-prev").addEventListener("click", () => stepDate(-1));
 $("date-next").addEventListener("click", () => stepDate(1));
 
 $("county").addEventListener("change", (event) => openRegion(event.target.value));
-$("heat").addEventListener("change", (event) => {
-  state.heat = event.target.checked;
-  loadHeatmap().catch(showError);
-});
 $("panel-close").addEventListener("click", () => closeRegion());
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && state.region) closeRegion();
