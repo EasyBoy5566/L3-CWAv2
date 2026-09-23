@@ -281,16 +281,25 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       const anchor = anchors.get(name);
       if (!anchor) return;
       const range = 190000;
+      const heading = viewer.camera.heading;
+      // With the panel covering the right side, aim at a point to the camera's
+      // right of the county so it lands left of centre. Shifting the target
+      // before the flight keeps it one smooth move; nudging the camera after
+      // it made the view jump at the end.
+      let { lon, lat } = anchor;
+      if (panelOpen) {
+        const shift = range * 0.12; // centres it between the controls card and the panel
+        const bearing = heading + Math.PI / 2;
+        const earth = Cesium.Ellipsoid.WGS84.maximumRadius;
+        lat += Cesium.Math.toDegrees((shift * Math.cos(bearing)) / earth);
+        lon += Cesium.Math.toDegrees((shift * Math.sin(bearing)) / (earth * Math.cos(Cesium.Math.toRadians(anchor.lat))));
+      }
       viewer.camera.flyToBoundingSphere(
-        new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(anchor.lon, anchor.lat), 1),
+        new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(lon, lat), 1),
         {
-          offset: new Cesium.HeadingPitchRange(viewer.camera.heading, Cesium.Math.toRadians(-45), range),
+          offset: new Cesium.HeadingPitchRange(heading, Cesium.Math.toRadians(-45), range),
           duration: 1.4,
-          // With the panel covering the right side, nudge the county left of centre.
-          complete: () => {
-            if (panelOpen) viewer.camera.moveRight(range * 0.28);
-            scene.requestRender();
-          },
+          complete: () => scene.requestRender(),
         },
       );
     },
