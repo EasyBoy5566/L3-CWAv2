@@ -185,7 +185,8 @@ $("home").addEventListener("click", () => state.globe?.flyHome());
 
 function showError(error) {
   const element = $("freshness");
-  element.insertAdjacentHTML("beforeend", `<span class="badge alert" title="${escapeHtml(error.message)}">資料載入失敗</span>`);
+  element.querySelector(".load-error")?.remove();
+  element.insertAdjacentHTML("beforeend", `<span class="badge alert load-error" title="${escapeHtml(error.message)}">資料載入失敗：${escapeHtml(error.message)}</span>`);
 }
 
 // ---------- polling ----------

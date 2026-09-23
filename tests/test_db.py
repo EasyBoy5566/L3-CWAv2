@@ -4,7 +4,7 @@ import pytest
 
 from app import config
 from app.db import SqliteDatabase, TursoDatabase, get_database, insert_rows, split_script
-from app.errors import DatabaseError
+from app.errors import ConfigurationError, DatabaseError
 
 
 class FakeResponse:
@@ -82,6 +82,14 @@ def test_backend_follows_environment(monkeypatch):
     monkeypatch.setenv("TURSO_DATABASE_URL", "libsql://x.turso.io")
     monkeypatch.setenv("TURSO_AUTH_TOKEN", "t")
     assert isinstance(get_database(), TursoDatabase)
+
+
+def test_vercel_without_turso_names_the_missing_variables(monkeypatch, client):
+    monkeypatch.setenv("VERCEL", "1")
+    with pytest.raises(ConfigurationError, match="TURSO_DATABASE_URL"):
+        get_database()
+    response = client.get("/api/meta")
+    assert response.status_code == 503 and "TURSO_DATABASE_URL" in response.get_json()["error"]
 
 
 def test_schema_splits_into_statements():

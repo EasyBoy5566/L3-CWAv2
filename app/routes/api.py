@@ -50,7 +50,7 @@ def bad_request(error):
 
 @bp.errorhandler(WeatherError)
 def weather_error(error):
-    # The only WeatherError a read can raise is DatabaseError.
+    # A read can only fail on the database: unreachable, or not configured.
     return jsonify(error=str(error)), 503
 
 

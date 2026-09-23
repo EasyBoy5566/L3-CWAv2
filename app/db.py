@@ -22,7 +22,7 @@ from pathlib import Path
 import requests
 
 from app import config
-from app.errors import DatabaseError
+from app.errors import ConfigurationError, DatabaseError
 
 Statement = tuple[str, tuple]
 
@@ -224,6 +224,9 @@ def get_database():
     """The configured database, reused across requests in one process."""
     global _database, _database_key
     url, token = config.turso_database_url(), config.turso_auth_token()
+    if config.on_vercel() and not (url and token):
+        # Vercel's filesystem is read-only, so the local-file fallback cannot work there.
+        raise ConfigurationError("伺服器尚未設定 TURSO_DATABASE_URL 與 TURSO_AUTH_TOKEN。")
     key = (url, token, str(config.LOCAL_DB_PATH))
     with _lock:
         if _database is None or _database_key != key:

@@ -21,7 +21,7 @@ def load_sample(dataset: str) -> dict:
 
 @pytest.fixture(autouse=True)
 def isolated(monkeypatch, tmp_path):
-    for name in ("TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN", "CRON_SECRET", "CESIUM_ION_TOKEN"):
+    for name in ("TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN", "CRON_SECRET", "CESIUM_ION_TOKEN", "VERCEL"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("CWA_API_KEY", "test-key")
     monkeypatch.setattr(config, "LOCAL_DB_PATH", tmp_path / "weather.db")

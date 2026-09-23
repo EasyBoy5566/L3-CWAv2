@@ -69,6 +69,11 @@ def turso_auth_token() -> str:
     return _env("TURSO_AUTH_TOKEN")
 
 
+def on_vercel() -> bool:
+    """Vercel sets VERCEL=1 in every build and function."""
+    return _env("VERCEL") == "1"
+
+
 def cron_secret() -> str:
     return _env("CRON_SECRET")
 
