@@ -216,3 +216,20 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Weather dashboard local files
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+data/*.db
+data/*.db-*
+.streamlit/secrets.toml
+.runtime/
+htmlcov/
+.coverage
+
