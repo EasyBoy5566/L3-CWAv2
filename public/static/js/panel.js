@@ -1,5 +1,5 @@
 // One county's weather: now, hourly, week, trend, history, sun and moon.
-// The globe's side panel and the standalone /region/<name> page both use it.
+// The globe's side panel and the standalone /region?name=<縣市> page both use it.
 import { getJSON, regionUrl } from "./api.js";
 import { ChartSet, historyDayOption, hourlyOption, humidityPressureOption, revisionsOption, trendOption } from "./charts.js";
 import { dayLabel, escapeHtml, hhmm, moonPhase, moonSvg, num, todayInTaipei, windText, wxIcon } from "./format.js";
@@ -56,7 +56,7 @@ export class RegionView {
 
   renderHead(data) {
     const link = this.mode === "drawer"
-      ? `<a href="/region/${encodeURIComponent(data.name)}" target="_blank" rel="noopener">開啟完整頁面 ↗</a>`
+      ? `<a href="/region?${new URLSearchParams({ name: data.name })}" target="_blank" rel="noopener">開啟完整頁面 ↗</a>`
       : "";
     this.part("head").innerHTML = `
       <h2>${escapeHtml(data.name)}</h2>
@@ -171,7 +171,7 @@ export class RegionView {
       }
     });
     try {
-      const trend = await getJSON(regionUrl(this.name, `/trend?days=${this.trendDays}`), { signal: this.aborter.signal });
+      const trend = await getJSON(regionUrl(this.name, "/trend", { days: this.trendDays }), { signal: this.aborter.signal });
       if (!trend.observed.length) {
         element.querySelector('[data-chart="trend"]').outerHTML = `<div class="empty">觀測資料累積中，排程每 10 分鐘寫入一次。</div>`;
         element.querySelector('[data-chart="hp"]').remove();
@@ -188,8 +188,7 @@ export class RegionView {
     const element = this.part("history");
     let history;
     try {
-      const query = day ? `?date=${day}` : "";
-      history = await getJSON(regionUrl(this.name, `/history${query}`), { signal: this.aborter.signal });
+      history = await getJSON(regionUrl(this.name, "/history", day ? { date: day } : {}), { signal: this.aborter.signal });
     } catch (error) {
       if (error.name !== "AbortError") element.innerHTML = `<h3>歷史</h3><div class="error-box">${escapeHtml(error.message)}</div>`;
       return;

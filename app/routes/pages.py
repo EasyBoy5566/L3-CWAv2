@@ -1,7 +1,7 @@
 """HTML pages. Both are shells: the data comes from the JSON API, so the
 globe's panel and the standalone region page render through the same code."""
 
-from flask import Blueprint, abort, make_response, render_template
+from flask import Blueprint, abort, make_response, render_template, request
 
 from app import config
 from app.routes import county_from_path
@@ -26,9 +26,12 @@ def index():
     return _page("index.html", region=None)
 
 
+@bp.get("/region")
 @bp.get("/region/<name>")
-def region(name: str):
-    county = county_from_path(name)
+def region(name: str | None = None):
+    # The panel links to ?name=, which survives Vercel's runtime; the path
+    # form is kept for hand-typed URLs.
+    county = county_from_path(name if name is not None else request.args.get("name", ""))
     if county is None:
         abort(404)
     return _page("region.html", region=county)

@@ -7,6 +7,7 @@ from app.errors import APIRequestError
 from tests.conftest import FROZEN
 
 TAICHUNG = quote("臺中市")
+REGION = f"/api/region?name={TAICHUNG}"
 
 
 def test_pages_render(client, loaded, monkeypatch):
@@ -42,20 +43,20 @@ def test_map_layers(client, loaded):
     assert "s-maxage=60" in response.headers["Cache-Control"]
 
 
-@pytest.mark.parametrize("url", ["/api/map?layer=wind", "/api/map?layer=maxt&date=tomorrow", f"/api/region/{TAICHUNG}/trend?days=5"])
+@pytest.mark.parametrize("url", ["/api/map?layer=wind", "/api/map?layer=maxt&date=tomorrow", f"/api/region/trend?name={TAICHUNG}&days=5"])
 def test_bad_parameters(client, loaded, url):
     response = client.get(url)
     assert response.status_code == 400 and response.get_json()["error"]
 
 
 def test_region_detail(client, loaded):
-    region = client.get(f"/api/region/{TAICHUNG}").get_json()
+    region = client.get(REGION).get_json()
     assert region["current"]["temperature"] is not None
     assert region["current"]["pressure"] is not None
     assert len(region["week"]) == 7 and region["week"][4]["approx"] is True
     assert region["hourly"][0]["time"] >= "2026-09-23T23:40:00+08:00"
     assert region["astronomy"][0]["date"] == "2026-09-24"
-    assert client.get("/api/region/Atlantis").status_code == 404
+    assert client.get("/api/region?name=Atlantis").status_code == 404
 
 
 @pytest.mark.parametrize("raw", [
@@ -71,26 +72,33 @@ def test_county_segment_survives_proxy_encodings(raw):
     assert county_from_path("Atlantis") is None
 
 
-def test_double_encoded_region_path_resolves(client, loaded):
-    # A segment that reaches Flask still encoded, as behind Vercel's runtime.
-    encoded_twice = quote(quote("新北市"))
-    assert client.get(f"/api/region/{encoded_twice}").get_json()["name"] == "新北市"
-    assert client.get(f"/region/{encoded_twice}").status_code == 200
+def test_region_endpoints_take_the_county_as_a_query_parameter(client, loaded):
+    name = quote("新北市")
+    assert client.get(f"/api/region?name={name}").get_json()["name"] == "新北市"
+    assert client.get(f"/api/region/trend?name={name}&days=7").get_json()["name"] == "新北市"
+    assert client.get(f"/api/region/history?name={name}").get_json()["name"] == "新北市"
+    assert client.get("/api/region/trend?days=7").status_code == 404
+
+
+def test_region_page_by_query_or_path(client, loaded):
+    assert client.get(f"/region?name={quote('新北市')}").status_code == 200
+    assert client.get(f"/region/{quote(quote('新北市'))}").status_code == 200
+    assert client.get("/region?name=Atlantis").status_code == 404
 
 
 def test_old_observations_are_not_called_current(client, loaded, cwa, clock):
     cwa.overrides["O-A0003-001"] = APIRequestError("down")
     clock(FROZEN + timedelta(hours=4))
-    region = client.get(f"/api/region/{TAICHUNG}").get_json()
+    region = client.get(REGION).get_json()
     assert region["current"] is None
 
 
 def test_history_and_future_dates(client, loaded):
-    history = client.get(f"/api/region/{TAICHUNG}/history?date=2026-09-24").get_json()
+    history = client.get(f"/api/region/history?name={TAICHUNG}&date=2026-09-24").get_json()
     assert history["summary"]["partial"] is True
     assert len(history["revisions"]) == 1
     assert history["range"]["first"] == "2026-09-24"
-    assert client.get(f"/api/region/{TAICHUNG}/history?date=2026-09-25").status_code == 400
+    assert client.get(f"/api/region/history?name={TAICHUNG}&date=2026-09-25").status_code == 400
 
 
 def test_read_through_refreshes_stale_observations(client, loaded, cwa, clock):

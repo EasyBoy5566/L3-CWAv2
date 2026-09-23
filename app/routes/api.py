@@ -79,17 +79,17 @@ def map_layer():
     return _cached(queries.map_layer(database, layer, day), 60)
 
 
-@bp.get("/region/<name>")
-def region(name: str):
-    name = _county(name)
+@bp.get("/region")
+def region():
+    name = _county(request.args.get("name", ""))
     database = get_database()
     freshness.refresh_observations_if_stale(database)
     return _cached(queries.region_detail(database, name), 60)
 
 
-@bp.get("/region/<name>/trend")
-def region_trend(name: str):
-    name = _county(name)
+@bp.get("/region/trend")
+def region_trend():
+    name = _county(request.args.get("name", ""))
     try:
         days = int(request.args.get("days", 7))
     except ValueError:
@@ -99,9 +99,9 @@ def region_trend(name: str):
     return _cached(queries.region_trend(get_database(), name, days), 300)
 
 
-@bp.get("/region/<name>/history")
-def region_history(name: str):
-    name = _county(name)
+@bp.get("/region/history")
+def region_history():
+    name = _county(request.args.get("name", ""))
     today = config.now().date()
     day = _date_param("date", (today - timedelta(days=1)).isoformat())
     if day > today.isoformat():

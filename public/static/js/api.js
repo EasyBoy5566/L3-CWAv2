@@ -13,4 +13,7 @@ export async function getJSON(url, { signal } = {}) {
   return body;
 }
 
-export const regionUrl = (name, suffix = "") => `/api/region/${encodeURIComponent(name)}${suffix}`;
+// The county goes in the query string: behind Vercel's Python runtime a
+// non-ASCII path segment does not reliably reach Flask intact.
+export const regionUrl = (name, suffix = "", params = {}) =>
+  `/api/region${suffix}?${new URLSearchParams({ name, ...params })}`;
