@@ -2,39 +2,8 @@
 // with the panel, so opening county after county does not leak canvases.
 /* global echarts */
 
-const TEXT = "#cbd5e1";
-const GRID_LINE = "rgba(148, 163, 184, 0.15)";
-const COLORS = { temp: "#f97316", feels: "#fbbf24", low: "#38bdf8", high: "#f87171", pop: "rgba(56, 189, 248, 0.45)", humidity: "#34d399", pressure: "#a78bfa", forecast: "#e2e8f0" };
-
-const timeLabel = (value) => new Intl.DateTimeFormat("zh-TW", { timeZone: "Asia/Taipei", month: "numeric", day: "numeric", hour: "2-digit", hourCycle: "h23" }).format(new Date(value));
-
-function base(extra = {}) {
-  return {
-    backgroundColor: "transparent",
-    textStyle: { color: TEXT, fontFamily: "inherit" },
-    grid: { left: 44, right: 44, top: 36, bottom: 28 },
-    tooltip: { trigger: "axis", backgroundColor: "rgba(15, 23, 42, 0.95)", borderColor: "rgba(148, 163, 184, 0.3)", textStyle: { color: "#e2e8f0" } },
-    legend: { top: 0, textStyle: { color: TEXT }, itemWidth: 14, itemHeight: 8 },
-    ...extra,
-  };
-}
-
-const timeAxis = () => ({
-  type: "time",
-  axisLine: { lineStyle: { color: GRID_LINE } },
-  axisLabel: { color: TEXT, hideOverlap: true, formatter: { day: "{M}/{d}", hour: "{HH}:{mm}" } },
-  splitLine: { show: false },
-});
-
-const valueAxis = (name, extra = {}) => ({
-  type: "value",
-  name,
-  nameTextStyle: { color: TEXT, fontSize: 11 },
-  axisLabel: { color: TEXT },
-  splitLine: { lineStyle: { color: GRID_LINE } },
-  scale: true,
-  ...extra,
-});
+const TEXT = "rgba(226, 232, 240, 0.75)";
+const GRID_LINE = "rgba(255, 255, 255, 0.08)";
 
 export class ChartSet {
   constructor() {
@@ -73,62 +42,70 @@ export class ChartSet {
 }
 
 const pair = (rows, x, y) => rows.filter((r) => r[y] !== null && r[y] !== undefined).map((r) => [r[x], r[y]]);
+const fade = (color, top, bottom) => new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+  { offset: 0, color: color.replace("ALPHA", top) },
+  { offset: 1, color: color.replace("ALPHA", bottom) },
+]);
 
-// Observed hourly temperature with each day's forecast low/high as markers.
-export function trendOption(trend) {
-  const noon = (d) => `${d}T12:00:00+08:00`;
-  return base({
-    xAxis: timeAxis(),
-    yAxis: valueAxis("°C"),
-    series: [
-      { name: "實測", type: "line", smooth: true, showSymbol: trend.observed.length < 24, data: pair(trend.observed, "observedAt", "temperature"), itemStyle: { color: COLORS.temp } },
-      { name: "預報最高", type: "scatter", symbol: "triangle", symbolSize: 9, data: trend.forecasts.filter((f) => f.maxt !== null).map((f) => [noon(f.dataDate), f.maxt]), itemStyle: { color: COLORS.high } },
-      { name: "預報最低", type: "scatter", symbol: "triangle", symbolRotate: 180, symbolSize: 9, data: trend.forecasts.filter((f) => f.mint !== null).map((f) => [noon(f.dataDate), f.mint]), itemStyle: { color: COLORS.low } },
+/** Temperature, feels-like and rain chance over the coming days, on glass. */
+export function hourlyOption(hourly) {
+  return {
+    backgroundColor: "transparent",
+    textStyle: { color: TEXT, fontFamily: "inherit" },
+    grid: { left: 34, right: 34, top: 14, bottom: 24 },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "line", lineStyle: { color: "rgba(255,255,255,0.35)" } },
+      backgroundColor: "rgba(12, 18, 36, 0.55)",
+      borderColor: "rgba(255, 255, 255, 0.25)",
+      borderRadius: 14,
+      padding: [8, 12],
+      textStyle: { color: "#f1f5fb", fontSize: 12 },
+      extraCssText: "backdrop-filter: blur(14px) saturate(160%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 8px 24px rgba(0,0,0,0.35);",
+      valueFormatter: (value) => (value === null || value === undefined ? "—" : `${value}`),
+    },
+    xAxis: {
+      type: "time",
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: TEXT, fontSize: 11, hideOverlap: true, formatter: { day: "{M}/{d}", hour: "{HH}時" } },
+      splitLine: { show: true, lineStyle: { color: GRID_LINE } },
+    },
+    yAxis: [
+      { type: "value", scale: true, axisLabel: { color: TEXT, fontSize: 11, formatter: "{value}°" }, splitLine: { lineStyle: { color: GRID_LINE } } },
+      { type: "value", min: 0, max: 100, axisLabel: { color: TEXT, fontSize: 11, formatter: "{value}%" }, splitLine: { show: false } },
     ],
-  });
-}
-
-export function humidityPressureOption(trend) {
-  return base({
-    xAxis: timeAxis(),
-    yAxis: [valueAxis("濕度 %", { min: 0, max: 100, scale: false }), valueAxis("hPa", { splitLine: { show: false } })],
     series: [
-      { name: "相對濕度", type: "line", smooth: true, showSymbol: trend.observed.length < 24, data: pair(trend.observed, "observedAt", "humidity"), itemStyle: { color: COLORS.humidity } },
-      { name: "氣壓", type: "line", yAxisIndex: 1, smooth: true, showSymbol: trend.observed.length < 24, data: pair(trend.observed, "observedAt", "pressure"), itemStyle: { color: COLORS.pressure } },
+      {
+        name: "降雨機率",
+        type: "bar",
+        yAxisIndex: 1,
+        barMaxWidth: 7,
+        data: pair(hourly, "time", "pop"),
+        itemStyle: { borderRadius: [4, 4, 0, 0], color: fade("rgba(125, 211, 252, ALPHA)", 0.75, 0.15) },
+        tooltip: { valueFormatter: (v) => `${v}%` },
+      },
+      {
+        name: "溫度",
+        type: "line",
+        smooth: true,
+        showSymbol: false,
+        data: pair(hourly, "time", "temperature"),
+        lineStyle: { width: 2.6, color: "#fdba74", shadowColor: "rgba(253, 186, 116, 0.6)", shadowBlur: 10 },
+        itemStyle: { color: "#fdba74" },
+        areaStyle: { color: fade("rgba(251, 146, 60, ALPHA)", 0.35, 0) },
+        tooltip: { valueFormatter: (v) => `${v}°C` },
+      },
+      {
+        name: "體感溫度",
+        type: "line",
+        smooth: true,
+        showSymbol: false,
+        data: pair(hourly, "time", "apparentTemperature"),
+        lineStyle: { width: 1.6, type: [4, 4], color: "rgba(254, 240, 138, 0.9)" },
+        itemStyle: { color: "#fef08a" },
+        tooltip: { valueFormatter: (v) => `${v}°C` },
+      },
     ],
-  });
-}
-
-// One day: the observed curve, and the latest forecast low/high as guides.
-export function historyDayOption(history) {
-  const last = history.revisions[history.revisions.length - 1];
-  const guides = last
-    ? [
-      { yAxis: last.maxt, name: "預報最高", lineStyle: { color: COLORS.high, type: "dashed" }, label: { formatter: `預報最高 ${last.maxt}°`, color: COLORS.high } },
-      { yAxis: last.mint, name: "預報最低", lineStyle: { color: COLORS.low, type: "dashed" }, label: { formatter: `預報最低 ${last.mint}°`, color: COLORS.low } },
-    ].filter((g) => g.yAxis !== null)
-    : [];
-  return base({
-    xAxis: timeAxis(),
-    yAxis: valueAxis("°C"),
-    series: [{
-      name: "實測溫度", type: "line", smooth: true, showSymbol: history.observed.length < 24,
-      data: pair(history.observed, "observedAt", "temperature"), itemStyle: { color: COLORS.temp },
-      markLine: { symbol: "none", silent: true, data: guides },
-    }],
-  });
-}
-
-// How the forecast for one date changed as it drew closer.
-export function revisionsOption(history) {
-  const rows = history.revisions;
-  return base({
-    tooltip: { ...base().tooltip, formatter: (items) => `${timeLabel(items[0].value[0])} 發布<br>${items.map((i) => `${i.marker}${i.seriesName} ${i.value[1]}°`).join("<br>")}` },
-    xAxis: timeAxis(),
-    yAxis: valueAxis("°C"),
-    series: [
-      { name: "預報最高", type: "line", step: "end", data: pair(rows, "fetchedAt", "maxt"), itemStyle: { color: COLORS.high } },
-      { name: "預報最低", type: "line", step: "end", data: pair(rows, "fetchedAt", "mint"), itemStyle: { color: COLORS.low } },
-    ],
-  });
+  };
 }

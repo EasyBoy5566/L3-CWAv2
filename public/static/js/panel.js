@@ -1,11 +1,11 @@
-// One county's weather, laid out like the iPhone Weather app: a hero with the
-// temperature, an hourly strip, the week, a grid of detail tiles, then the
-// observed trend and forecast history. The globe's side panel and the
-// standalone /region?name=<縣市> page both use it.
+// One county's weather in liquid glass: a hero with the temperature and
+// capsules for the day's range, an hourly strip of glass capsules, the
+// temperature and rain chart, the week, and a grid of detail tiles. The
+// globe's side panel and the standalone /region?name=<縣市> page share it.
 import { getJSON, regionUrl } from "./api.js";
-import { ChartSet, historyDayOption, humidityPressureOption, revisionsOption, trendOption } from "./charts.js";
-import { dayLabel, escapeHtml, hhmm, moonPhase, moonSvg, num, todayInTaipei, windText } from "./format.js";
-import { Segmented, refract } from "./glass.js";
+import { ChartSet, hourlyOption } from "./charts.js";
+import { escapeHtml, hhmm, moonPhase, moonSvg, num, todayInTaipei, windText } from "./format.js";
+import { refract } from "./glass.js";
 import { GLYPH, SUNRISE, SUNSET, kindFromCode, kindFromText, weatherIcon } from "./icons.js";
 import { TEMPERATURE, colorAt } from "./scale.js";
 
@@ -144,30 +144,27 @@ export class RegionView {
     this.name = name;
     this.mode = mode;
     this.charts = new ChartSet();
-    this.trendDays = 7;
     this.aborter = new AbortController();
   }
 
   async load() {
     const page = this.mode === "page";
-    const card = (part, extra = "") =>
-      `<section class="wx-card ${extra}${page ? " glass" : ""}" data-part="${part}"${page ? ' data-refract="30"' : ""}></section>`;
+    // Inside the globe's panel (already glass) cards are lighter lenses; on
+    // the standalone page each is a full pane of glass.
+    const card = (part) =>
+      `<section class="wx-card ${page ? "glass" : "lens"}" data-part="${part}"${page ? ' data-refract="30"' : ""}></section>`;
     this.container.classList.add("wx");
     this.container.innerHTML = `
       ${page ? "" : `<div class="wx-compact" data-part="compact" aria-hidden="true"></div>`}
       <header class="wx-hero" data-part="hero"><div class="skeleton"></div></header>
-      ${card("hourly", "span")}
-      ${card("week", "week")}
+      ${card("hourly")}
+      ${card("chart")}
+      ${card("week")}
       <div class="wx-tiles" data-part="tiles"></div>
-      ${card("trend", "span")}
-      ${card("history", "span")}
       <p class="wx-foot" data-part="foot"></p>`;
     refract(this.container);
-    this.initTrend();
     if (!page) this.watchHero();
     await this.refresh();
-    this.loadTrend();
-    this.loadHistory();
   }
 
   part(name) {
@@ -196,37 +193,46 @@ export class RegionView {
     this.astro = new Map(data.astronomy.map((a) => [a.date, a]));
     const night = nightAt(taipeiNow(), this.astro);
     const kind = kindFromText(data.current?.weather) ?? kindFromCode(data.hourly[0]?.wxCode) ?? "partly";
-    // The panel's sky follows the weather, as the iOS backgrounds do.
-    this.container.dataset.sky = `${kind}-${night ? "night" : "day"}`;
     this.renderHero(data, kind, night);
     this.renderHourly(data);
+    this.renderChart(data);
     this.renderWeek(data);
     this.renderTiles(data);
     this.renderFoot(data);
   }
 
-  renderHero({ name, current, hourly, week }, kind, night) {
+  renderHero({ name, current, hourly, week, periods }, kind, night) {
     const temperature = current?.temperature ?? hourly[0]?.temperature ?? null;
     const condition = current?.weather ?? hourly[0]?.wx ?? "";
     const today = week.find((d) => d.dataDate === todayInTaipei()) ?? week[0];
+    const feels = hourly[0]?.apparentTemperature;
+    const summary = (periods[0]?.description ?? "").split("。").filter(Boolean).slice(0, 2).join("。");
+    const chip = (content, extra = "") => `<span class="chip lens ${extra}">${content}</span>`;
     this.part("hero").innerHTML = `
-      <h2>${escapeHtml(name)}</h2>
-      <div class="wx-temp">${temperature === null ? "—" : Math.round(temperature)}<span>°</span></div>
-      <div class="wx-cond">${weatherIcon(kind, { night, size: 22 })}${escapeHtml(condition)}</div>
-      ${today ? `<div class="wx-hilo">最高 ${deg(today.maxt)}　最低 ${deg(today.mint)}</div>` : ""}`;
+      <div class="wx-place">
+        <h2>${escapeHtml(name)}</h2>
+        ${chip(`${weatherIcon(kind, { night, size: 18 })}${escapeHtml(condition)}`, "cond")}
+      </div>
+      <div class="wx-now">
+        <div class="wx-temp">${temperature === null ? "—" : Math.round(temperature)}<span>°</span></div>
+        <div class="wx-range">
+          ${today ? chip(`<b class="up">↑</b>最高 ${deg(today.maxt)}`) + chip(`<b class="down">↓</b>最低 ${deg(today.mint)}`) : ""}
+          ${feels === null || feels === undefined ? "" : chip(`體感 ${deg(feels)}`)}
+        </div>
+      </div>
+      ${summary ? `<p class="wx-summary">${escapeHtml(summary)}。</p>` : ""}`;
     const compact = this.part("compact");
     if (compact) {
       compact.innerHTML = `<div class="bar"><b>${escapeHtml(name)}</b><span>${temperature === null ? "—" : Math.round(temperature)}° ｜ ${escapeHtml(condition)}</span></div>`;
     }
   }
 
-  renderHourly({ hourly, periods, current }) {
+  renderHourly({ hourly, current }) {
     const element = this.part("hourly");
     if (!hourly.length) {
       element.innerHTML = `${title("clock", "每小時預報")}<div class="empty">暫無逐時預報。</div>`;
       return;
     }
-    const summary = (periods[0]?.description ?? "").split("。").filter(Boolean).slice(0, 2).join("。");
     const items = hourly.map((h, i) => {
       const hour = h.time.slice(11, 13);
       const label = i === 0 ? "現在" : hour === "00" ? weekday(h.time.slice(0, 10)) : `${Number(hour)}時`;
@@ -254,10 +260,26 @@ export class RegionView {
     }
     items.sort((a, b) => a.time - b.time);
     element.innerHTML = `
-      ${summary ? `<p class="wx-summary">${escapeHtml(summary)}。</p>` : ""}
-      ${title("clock", "每小時預報")}
+      ${title("clock", "每小時預報", `<span class="hint">拖曳查看更多</span>`)}
       <ol class="hours">${items.map((item) => item.html).join("")}</ol>`;
     dragToScroll(element.querySelector(".hours"));
+  }
+
+  renderChart({ hourly }) {
+    const element = this.part("chart");
+    if (!hourly.length) {
+      element.hidden = true;
+      return;
+    }
+    element.hidden = false;
+    const key = (color, label, dashed = false) =>
+      `<span class="key"><i style="background:${color}"${dashed ? ' class="dashed"' : ""}></i>${label}</span>`;
+    if (!element.querySelector(".chart")) {
+      element.innerHTML = `
+        ${title("chart", "溫度與降雨", `<span class="keys">${key("#fdba74", "溫度")}${key("#fef08a", "體感", true)}${key("#7dd3fc", "降雨機率")}</span>`)}
+        <div class="chart"></div>`;
+    }
+    this.charts.make(element.querySelector(".chart"), hourlyOption(hourly));
   }
 
   renderWeek({ week, current }) {
@@ -276,7 +298,7 @@ export class RegionView {
       const left = ((d.mint - lo) / span) * 100;
       const width = Math.max(((d.maxt - d.mint) / span) * 100, 3);
       const dot = d.dataDate === today && now !== null ? `<em style="left:${((now - lo) / span) * 100}%"></em>` : "";
-      return `<li>
+      return `<li class="${d.dataDate === today ? "today" : ""}">
         <span class="d">${d.dataDate === today ? "今天" : weekday(d.dataDate)}</span>
         <span class="i">${weatherIcon(kindFromCode(d.wxCode), { size: 26, label: d.wx ?? "" })}${d.pop >= 20 ? `<small class="pop">${Math.round(d.pop)}%</small>` : ""}</span>
         <span class="lo">${d.approx ? `<i title="由 12 小時預報推估">約</i>` : ""}${deg(d.mint)}</span>
@@ -291,7 +313,7 @@ export class RegionView {
     const page = this.mode === "page";
     const first = hourly[0] ?? {};
     const tile = (glyph, label, main, foot, extra = "") => `
-      <section class="wx-card tile ${extra}${page ? " glass" : ""}"${page ? ' data-refract="24"' : ""}>
+      <section class="wx-card tile ${extra} ${page ? "glass" : "lens"}"${page ? ' data-refract="24"' : ""}>
         ${title(glyph, label)}
         <div class="tile-main">${main}</div>
         <p class="tile-foot">${foot}</p>
@@ -364,75 +386,11 @@ export class RegionView {
     this.part("foot").innerHTML = `${observed} · 預報 ${hhmm(forecastFetchedAt)} 取得 · 資料：中央氣象署${link}`;
   }
 
-  initTrend() {
-    const element = this.part("trend");
-    const tabs = [1, 7, 30].map((d) => `<button type="button" data-value="${d}" aria-pressed="${d === this.trendDays}">${d} 天</button>`).join("");
-    element.innerHTML = `
-      ${title("chart", "過去觀測", `<span class="tabs" role="group" aria-label="期間">${tabs}</span>`)}
-      <div class="trend-body"></div>
-      <p class="note">縣市平地測站中位數，每小時一點；三角形為當日最後一版預報的最高／最低。</p>`;
-    new Segmented(element.querySelector(".tabs"), {
-      attribute: "aria-pressed",
-      onChange: (value) => {
-        this.trendDays = Number(value);
-        this.loadTrend();
-      },
-    });
-  }
-
-  async loadTrend() {
-    const element = this.part("trend").querySelector(".trend-body");
-    element.innerHTML = `<div class="chart" data-chart="trend"></div><div class="chart small" data-chart="hp"></div>`;
-    try {
-      const trend = await getJSON(regionUrl(this.name, "/trend", { days: this.trendDays }), { signal: this.aborter.signal });
-      if (!trend.observed.length) {
-        element.innerHTML = `<div class="empty">觀測資料累積中，排程每 10 分鐘寫入一次。</div>`;
-        return;
-      }
-      this.charts.make(element.querySelector('[data-chart="trend"]'), trendOption(trend));
-      this.charts.make(element.querySelector('[data-chart="hp"]'), humidityPressureOption(trend));
-    } catch (error) {
-      if (error.name !== "AbortError") element.innerHTML = `<div class="error-box">${escapeHtml(error.message)}</div>`;
-    }
-  }
-
-  async loadHistory(day) {
-    const element = this.part("history");
-    let history;
-    try {
-      history = await getJSON(regionUrl(this.name, "/history", day ? { date: day } : {}), { signal: this.aborter.signal });
-    } catch (error) {
-      if (error.name !== "AbortError") element.innerHTML = `${title("history", "預報與實測")}<div class="error-box">${escapeHtml(error.message)}</div>`;
-      return;
-    }
-    const last = history.revisions.at(-1);
-    const summary = history.summary;
-    const diff = (forecast, observed) => (forecast === null || forecast === undefined || observed === null || observed === undefined
-      ? "—" : `${forecast - observed > 0 ? "+" : ""}${(forecast - observed).toFixed(1)}°`);
-    const stat = (label, value) => `<div class="stat"><span>${label}</span><b>${value}</b></div>`;
-    element.innerHTML = `
-      ${title("history", "預報與實測", `<input type="date" value="${history.date}" min="${history.range.first ?? history.date}" max="${history.range.last}" aria-label="日期">`)}
-      <div class="stats">
-        ${stat("實測 高／低", summary ? `${deg(summary.tmax)} / ${deg(summary.tmin)}${summary.partial ? "<small>至目前</small>" : ""}` : "—")}
-        ${stat("預報 高／低", last ? `${deg(last.maxt)} / ${deg(last.mint)}` : "—")}
-        ${stat("誤差 高／低", summary && last ? `${diff(last.maxt, summary.tmax)} / ${diff(last.mint, summary.tmin)}` : "—")}
-        ${stat("預報版本", `${history.revisions.length}`)}
-      </div>
-      ${history.observed.length ? `<div class="chart" data-chart="day"></div>` : `<div class="empty">${dayLabel(history.date)} 沒有實測資料${history.range.first ? `，可查詢 ${history.range.first} 之後` : ""}。</div>`}
-      ${history.revisions.length > 1 ? `<p class="note">預報修正歷程：每一版對 ${dayLabel(history.date)} 的預報</p><div class="chart small" data-chart="revisions"></div>` : ""}`;
-    element.querySelector("input[type=date]").addEventListener("change", (event) => {
-      if (event.target.value) this.loadHistory(event.target.value);
-    });
-    if (history.observed.length) this.charts.make(element.querySelector('[data-chart="day"]'), historyDayOption(history));
-    if (history.revisions.length > 1) this.charts.make(element.querySelector('[data-chart="revisions"]'), revisionsOption(history));
-  }
-
   dispose() {
     this.aborter.abort();
     this.heroObserver?.disconnect();
     this.charts.dispose();
     this.container.classList.remove("wx");
-    delete this.container.dataset.sky;
     this.container.innerHTML = "";
   }
 }

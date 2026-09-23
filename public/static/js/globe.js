@@ -191,6 +191,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     requestAnimationFrame(() => {
       const position = pending;
       pending = null;
+      if (!position) return; // the pointer left the canvas meanwhile
       const name = nameAt(position);
       if (name !== hovered) {
         hovered = name;
@@ -200,6 +201,17 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       onHover?.(name, { x: position.x, y: position.y });
     });
   }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+  // Cesium reports moves only over the canvas, so leaving it for the dock or
+  // a panel would otherwise strand the hover card and highlight in place.
+  scene.canvas.addEventListener("mouseleave", () => {
+    pending = null;
+    if (hovered) {
+      hovered = null;
+      scene.canvas.style.cursor = "";
+      refreshHighlights();
+    }
+    onHover?.(null);
+  });
   handler.setInputAction((click) => {
     const name = nameAt(click.position);
     if (name) onSelect?.(name, { x: click.position.x, y: click.position.y });
