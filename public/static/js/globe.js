@@ -3,6 +3,7 @@
 /* global Cesium */
 import { Bubbles } from "./bubbles.js";
 import { BOUNDS, bordersCanvas, countyAt, highlightCanvas, loadCounties } from "./geo.js";
+import { Overlays } from "./overlays.js";
 
 // The camera aims south of the island's centre so Taiwan sits above the dock.
 const HOME = { lon: 120.95, lat: 23.15, heading: -12, pitch: -42, range: 600000 };
@@ -10,6 +11,17 @@ const HOME = { lon: 120.95, lat: 23.15, heading: -12, pitch: -42, range: 600000 
 // extra sea to the south so the dock does not cover the southern tip.
 const TAIWAN_2D = [117.9, 21.0, 122.6, 26.5];
 const EXAGGERATION = 2.5;
+// Terrain is exaggerated from afar so the Central Range reads, and eases back
+// to true scale near the ground so buildings and streets sit right.
+const TRUE_SCALE_BELOW = 20000;
+const FULL_SCALE_ABOVE = 150000;
+
+// Where the shadow simulation takes the camera: tall buildings, clear shadows.
+export const SHADOW_CITIES = {
+  taipei: { label: "臺北 101", lon: 121.5645, lat: 25.0339, heading: 205, pitch: -24, range: 2400 },
+  kaohsiung: { label: "高雄 85 大樓", lon: 120.3006, lat: 22.6116, heading: 160, pitch: -24, range: 2200 },
+  taichung: { label: "臺中 七期", lon: 120.6440, lat: 24.1630, heading: 200, pitch: -26, range: 2400 },
+};
 
 // Bubble anchors inside each county, spread so the crowded north and the
 // county/city pairs (Hsinchu, Chiayi) do not stack at the default view.
@@ -55,7 +67,7 @@ async function canvasLayer(viewer, canvas, bounds, index) {
   return viewer.imageryLayers.addImageryProvider(provider, index);
 }
 
-export async function createGlobe(element, { token, counties: countyList, onHover, onSelect }) {
+export async function createGlobe(element, { token, counties: countyList, onHover, onInfo, onSelect }) {
   if (token) Cesium.Ion.defaultAccessToken = token;
   const terrain = token ? Cesium.Terrain.fromWorldTerrain({ requestVertexNormals: true }) : undefined;
   const options = {
@@ -163,12 +175,15 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     const points = [...anchors].map(([, a]) => Cesium.Cartographic.fromDegrees(a.lon, a.lat));
     try {
       await Cesium.sampleTerrainMostDetailed(provider, points);
-      bubbles.setHeights([...anchors.keys()].map((name, i) => [name, (points[i].height || 0) * exaggeration + 150]));
+      bubbles.setHeights([...anchors.keys()].map((name, i) => [name, points[i].height || 0]));
     } catch (error) {
       console.warn("terrain heights unavailable", error);
     }
   };
   if (terrain) terrain.readyEvent.addEventListener(liftBubbles);
+
+  const dataLayers = new Overlays(viewer);
+  const COUNTY_NAMES = new Set(countyList.map((c) => c.name));
 
   // ---------- picking by position, not by primitive ----------
   const lonLatAt = (position) => {
@@ -196,6 +211,13 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       const position = pending;
       pending = null;
       if (!position) return; // the pointer left the canvas meanwhile
+      const info = dataLayers.infoFor(scene.pick(position));
+      onInfo?.(info, { x: position.x, y: position.y });
+      if (info) {
+        scene.canvas.style.cursor = info.county ? "pointer" : "";
+        onHover?.(null);
+        return;
+      }
       const name = nameAt(position);
       if (name !== hovered) {
         hovered = name;
@@ -209,6 +231,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   // a panel would otherwise strand the hover card and highlight in place.
   scene.canvas.addEventListener("mouseleave", () => {
     pending = null;
+    onInfo?.(null);
     if (hovered) {
       hovered = null;
       scene.canvas.style.cursor = "";
@@ -217,7 +240,9 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     onHover?.(null);
   });
   handler.setInputAction((click) => {
-    const name = nameAt(click.position);
+    // A station or township opens its county; elsewhere, the county under the pointer.
+    const info = dataLayers.infoFor(scene.pick(click.position));
+    const name = info ? (COUNTY_NAMES.has(info.county) ? info.county : null) : nameAt(click.position);
     if (name) onSelect?.(name, { x: click.position.x, y: click.position.y });
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
@@ -237,6 +262,48 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   };
   flyHome(0);
   pickBorders();
+
+  if (token) {
+    const exaggerationAt = (height) => {
+      if (height <= TRUE_SCALE_BELOW) return 1;
+      if (height >= FULL_SCALE_ABOVE) return EXAGGERATION;
+      return 1 + (EXAGGERATION - 1) * ((height - TRUE_SCALE_BELOW) / (FULL_SCALE_ABOVE - TRUE_SCALE_BELOW));
+    };
+    scene.preRender.addEventListener(() => {
+      const target = exaggerationAt(viewer.camera.positionCartographic.height);
+      const current = scene.verticalExaggeration;
+      if (Math.abs(target - current) > 0.005) {
+        scene.verticalExaggeration = current + (target - current) * 0.25;
+        scene.requestRender();
+      }
+    });
+  }
+
+  // ---------- buildings and the shadow simulation ----------
+  let buildings = null;
+  let userShadows = false;
+  let simulating = false;
+  const setBuildings = async (on) => {
+    if (!token) throw new Error("建築模型需要 Cesium ion token。");
+    if (on && !buildings) {
+      buildings = await Cesium.createOsmBuildingsAsync();
+      // One pale material reads as architecture rather than a map legend.
+      buildings.style = new Cesium.Cesium3DTileStyle({ color: "color('#e8edf4', 1.0)" });
+      buildings.shadows = Cesium.ShadowMode.ENABLED;
+      scene.primitives.add(buildings);
+    }
+    if (buildings) buildings.show = on;
+    scene.requestRender();
+  };
+  const applyShadows = () => {
+    const on = simulating || userShadows;
+    viewer.shadows = on;
+    viewer.terrainShadows = simulating ? Cesium.ShadowMode.RECEIVE_ONLY : on ? Cesium.ShadowMode.ENABLED : Cesium.ShadowMode.DISABLED;
+    // Close up, a short shadow distance keeps building shadows crisp.
+    viewer.shadowMap.maximumDistance = simulating ? 6000 : 20000;
+    viewer.shadowMap.darkness = simulating ? 0.35 : 0.3;
+    scene.requestRender();
+  };
 
   let switching = false;
   // Resolves when the globe has its tiles, or after `limit` ms, whichever is first.
@@ -271,6 +338,30 @@ export async function createGlobe(element, { token, counties: countyList, onHove
 
     setValues(layer, values, scale) {
       bubbles.setValues(layer, values, scale);
+    },
+
+    setOverlay: (name, on) => dataLayers.set(name, on),
+    refreshOverlays: () => dataLayers.refresh(),
+    overlayLegend: (name) => dataLayers.legend(name),
+    activeOverlays: () => [...dataLayers.active.keys()],
+
+    setBuildings,
+
+    /** Buildings on, shadows on, and the camera low over a tall skyline. */
+    async startShadowSimulation(city = "taipei") {
+      await setBuildings(true);
+      simulating = true;
+      applyShadows();
+      const spot = SHADOW_CITIES[city] ?? SHADOW_CITIES.taipei;
+      viewer.camera.flyToBoundingSphere(
+        new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(spot.lon, spot.lat, 120), 1),
+        { offset: new Cesium.HeadingPitchRange(Cesium.Math.toRadians(spot.heading), Cesium.Math.toRadians(spot.pitch), spot.range), duration: 2.4 },
+      );
+    },
+
+    stopShadowSimulation() {
+      simulating = false;
+      applyShadows();
     },
 
     select(name) {
@@ -328,9 +419,8 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     },
 
     setShadows(on) {
-      viewer.shadows = on;
-      viewer.terrainShadows = on ? Cesium.ShadowMode.ENABLED : Cesium.ShadowMode.DISABLED;
-      scene.requestRender();
+      userShadows = on;
+      applyShadows();
     },
 
     // Cesium's morph animates out to the whole globe and would then have to

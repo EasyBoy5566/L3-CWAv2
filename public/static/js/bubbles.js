@@ -48,6 +48,7 @@ export class Bubbles {
     this.scene.postRender.addEventListener(() => this.update());
   }
 
+  /** Ground heights in metres, as the terrain has them before exaggeration. */
   setHeights(heights) {
     for (const [name, height] of heights) {
       const item = this.items.get(name);
@@ -96,7 +97,9 @@ export class Bubbles {
 
     for (const name of order) {
       const item = this.items.get(name);
-      const world = Cesium.Cartesian3.fromDegrees(item.lon, item.lat, item.height);
+      // Heights are stored unexaggerated; the exaggeration eases with camera height.
+      const lifted = item.height * this.scene.verticalExaggeration + 150;
+      const world = Cesium.Cartesian3.fromDegrees(item.lon, item.lat, lifted);
       const screen = this.scene.mode === Cesium.SceneMode.SCENE3D && !occluder.isPointVisible(world)
         ? undefined
         : this.toWindow(this.scene, world);

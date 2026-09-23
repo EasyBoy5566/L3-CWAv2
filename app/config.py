@@ -23,6 +23,18 @@ FORECAST_WEEK_DATASET = "F-D0047-091"
 SUN_DATASET = "A-B0062-001"
 MOON_DATASET = "A-B0063-001"
 
+# Map overlays, read through the server and cached rather than stored.
+RAIN_DATASET = "O-A0002-001"
+HOURLY_STATIONS_DATASET = "O-A0001-001"
+TYPHOON_DATASET = "W-C0034-005"
+HEAT_DATASET = "M-A0085-001"
+UV_DATASET = "O-A0005-001"
+TOWNSHIP_DATASET = "F-D0047-093"
+# F-D0047-093 serves any mix of the per-county three-day township datasets,
+# named by locationId: these are all 22 of them.
+TOWNSHIP_LOCATION_IDS = [f"F-D0047-{n:03d}" for n in range(1, 86, 4)]
+TOWNSHIP_ELEMENTS = ["溫度", "天氣現象", "3小時降雨機率"]
+
 REQUEST_TIMEOUT = 15
 # A visitor's request waits on this one, so it is shorter than the cron timeout.
 READ_THROUGH_TIMEOUT = 8

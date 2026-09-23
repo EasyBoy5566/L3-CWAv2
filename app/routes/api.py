@@ -9,7 +9,7 @@ from datetime import date, timedelta
 
 from flask import Blueprint, abort, jsonify, request
 
-from app import config, freshness, queries
+from app import config, freshness, overlays, queries
 from app.db import get_database
 from app.errors import WeatherError
 from app.routes import county_from_path
@@ -52,7 +52,7 @@ def bad_request(error):
 
 @bp.errorhandler(WeatherError)
 def weather_error(error):
-    # A read can only fail on the database: unreachable, or not configured.
+    # The database is unreachable or unconfigured, or CWA failed behind an overlay.
     return jsonify(error=str(error)), 503
 
 
@@ -77,6 +77,14 @@ def map_layer():
         freshness.refresh_observations_if_stale(database)
     day = _date_param("date", config.now().date().isoformat())
     return _cached(queries.map_layer(database, layer, day), 60)
+
+
+@bp.get("/overlays/<name>")
+def overlay(name: str):
+    """One optional map layer, read through from CWA and cached."""
+    if name not in overlays.NAMES:
+        abort(404)
+    return _cached(overlays.overlay(name, get_database()), overlays.TTL[name])
 
 
 @bp.get("/region")

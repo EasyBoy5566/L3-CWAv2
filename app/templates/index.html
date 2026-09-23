@@ -30,6 +30,41 @@
         {% for name in counties %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
       </select>
     </label>
+
+    <div class="control-title">資料圖層</div>
+    <div class="toggles" id="overlays">
+      {% for key, name, note in [
+        ("rain", "雨量站", "1,341 站 · 24 小時累積"),
+        ("stations", "氣象站觀測", "876 站 · 逐時"),
+        ("typhoon", "颱風路徑", "路徑與 70% 潛勢"),
+        ("heat", "熱傷害指數", "368 鄉鎮 · 逐 3 小時"),
+        ("uv", "紫外線", "測站當日最大值"),
+        ("townships", "鄉鎮預報", "368 鄉鎮 · 逐時"),
+      ] %}
+      <label class="toggle" data-overlay="{{ key }}">
+        <input type="checkbox" data-overlay="{{ key }}">
+        <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+        <span class="toggle-text">{{ name }}<small data-note="{{ note }}">{{ note }}</small></span>
+      </label>
+      {% endfor %}
+    </div>
+
+    <div class="control-title">3D</div>
+    <div class="toggles">
+      <label class="toggle">
+        <input type="checkbox" id="buildings">
+        <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+        <span class="toggle-text">建築模型<small id="buildings-note">OpenStreetMap · 拉近後顯示</small></span>
+      </label>
+    </div>
+    <button type="button" class="sim-button" id="shadow-sim" aria-pressed="false">
+      <span class="sim-icon" aria-hidden="true">◐</span><span class="sim-label">建築陰影模擬</span>
+    </button>
+    <div id="sim-cities" role="radiogroup" aria-label="模擬地點" hidden>
+      <button type="button" role="radio" data-value="taipei" aria-checked="true">臺北 101</button>
+      <button type="button" role="radio" data-value="kaohsiung" aria-checked="false">高雄 85</button>
+      <button type="button" role="radio" data-value="taichung" aria-checked="false">臺中七期</button>
+    </div>
   </aside>
 
   <div class="dock glass" data-refract="44" role="toolbar" aria-label="日期、時間與檢視">
@@ -40,6 +75,7 @@
     </div>
     <span class="divider" aria-hidden="true"></span>
     <div class="clock">
+      <button type="button" class="icon-btn" id="clock-play" aria-pressed="false" aria-label="播放一天的日照" title="播放一天的日照">▶</button>
       <span class="clock-icon" id="clock-icon" aria-hidden="true">☾</span>
       <input type="range" id="clock" min="0" max="1439" step="10" aria-label="日照模擬時間">
       <output id="clock-label" for="clock">現在</output>

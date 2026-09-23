@@ -339,10 +339,14 @@ input[type="range"]::-moz-range-thumb {
   top: var(--top);
   left: 12px;
   width: 272px;
+  max-height: calc(100vh - var(--top) - 96px);
+  overflow-y: auto;
+  scrollbar-width: none;
   display: grid;
-  gap: 14px;
+  gap: 12px;
   padding: 16px;
 }
+.controls::-webkit-scrollbar { display: none; }
 .control-title { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--muted); }
 .controls .field { display: grid; gap: 8px; }
 .controls select { width: 100%; }
@@ -390,6 +394,9 @@ input[type="range"]::-moz-range-thumb {
 .hover-card strong { font-size: 15px; display: block; }
 .hover-card .value { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .hover-card .muted { color: var(--muted); }
+.info-rows { display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; margin: 8px 0 4px; font-variant-numeric: tabular-nums; }
+.info-rows dt { color: var(--muted); }
+.info-rows dd { margin: 0; font-weight: 600; text-align: right; }
 
 .fallback {
   position: absolute;
@@ -728,7 +735,7 @@ body.page-region { background: transparent; }
 .gselect.disabled { opacity: 0.45; }
 
 /* In the dock the date reads as text between the arrows, not as a field. */
-.stepper .gselect-trigger { width: auto; padding: 6px 10px; background: transparent; box-shadow: none; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stepper .gselect-trigger { width: auto; padding: 6px 10px; background: transparent; box-shadow: none; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .stepper .gselect-trigger:hover { background: rgba(255, 255, 255, 0.12); }
 
 .gselect-menu {
@@ -763,3 +770,80 @@ body.page-region { background: transparent; }
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.12));
   box-shadow: inset 0 1px 0.5px rgba(255, 255, 255, 0.8), 0 2px 8px rgba(0, 0, 0, 0.2);
 }
+
+/* ---------- overlay and 3D toggles ---------- */
+.toggles { display: grid; gap: 2px; margin-top: -4px; }
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.toggle:hover { background: rgba(255, 255, 255, 0.06); }
+.toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.toggle-text { display: grid; font-size: 13px; line-height: 1.3; }
+.toggle-text small { font-size: 11px; color: var(--faint); }
+.toggle.busy small { color: var(--accent); }
+.toggle.error small { color: var(--alert); }
+.toggle input:disabled ~ * { opacity: 0.45; }
+.toggle input:disabled ~ .toggle-text { cursor: default; }
+
+/* A glass switch: a recessed track and a bead of light that slides. */
+.switch-track {
+  position: relative;
+  flex: none;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  transition: background 0.3s;
+}
+.switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, rgba(255, 255, 255, 0.78) 55%, rgba(255, 255, 255, 0.5));
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  transition: transform 0.35s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+.toggle input:checked + .switch-track {
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.75), rgba(125, 211, 252, 0.9));
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.35), 0 0 12px rgba(56, 189, 248, 0.35);
+}
+.toggle input:checked + .switch-track .switch-thumb { transform: translateX(16px); }
+.toggle input:focus-visible + .switch-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.mini-legend { display: grid; gap: 3px; margin: -2px 8px 6px 56px; font-size: 10px; color: var(--faint); }
+.mini-legend i { display: block; height: 5px; border-radius: 3px; }
+.mini-legend .ticks { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+.mini-legend .ticks b { font-weight: 500; }
+
+.sim-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 14px;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.28), rgba(249, 115, 22, 0.12));
+  box-shadow: inset 0 1px 0.5px rgba(254, 215, 170, 0.7), inset 0 -1px 1px rgba(255, 255, 255, 0.06), 0 4px 14px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s var(--ease), background 0.3s;
+}
+.sim-button:hover { background: linear-gradient(135deg, rgba(251, 191, 36, 0.38), rgba(249, 115, 22, 0.18)); }
+.sim-button:active { transform: scale(0.98); }
+.sim-button[aria-pressed="true"] { background: linear-gradient(135deg, rgba(248, 113, 113, 0.3), rgba(190, 18, 60, 0.14)); box-shadow: inset 0 1px 0.5px rgba(254, 202, 202, 0.7), 0 4px 14px rgba(0, 0, 0, 0.25); }
+.sim-icon { font-size: 16px; }
+#sim-cities > button { font-size: 12px; padding: 6px 4px; }

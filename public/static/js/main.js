@@ -30,6 +30,10 @@ const state = {
   globe: null,
   dataStamp: null,
   simulated: null, // a Date while the sun clock is dragged, else null (live)
+  info: null, // the overlay entity under the pointer, if any
+  hoverCounty: null,
+  playTimer: null,
+  simCity: "taipei",
 };
 
 // ---------- data ----------
@@ -134,7 +138,30 @@ window.addEventListener("popstate", () => {
 });
 
 // ---------- hover card ----------
+function placeCard(card, position) {
+  const stage = document.querySelector(".stage").getBoundingClientRect();
+  card.style.left = `${Math.min(position.x + 18, stage.width - card.offsetWidth - 10)}px`;
+  card.style.top = `${Math.min(position.y + 18, stage.height - card.offsetHeight - 10)}px`;
+}
+
+// A station, township or typhoon under the pointer takes the card from the county.
+function showInfo(info, position) {
+  state.info = info;
+  const card = $("hover");
+  if (!info) {
+    if (!state.hoverCounty) card.hidden = true;
+    return;
+  }
+  const rows = info.lines.map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd>${value}</dd>`).join("");
+  card.innerHTML = `<strong>${escapeHtml(info.title ?? "")}</strong><div class="muted">${escapeHtml(info.sub ?? "")}</div>
+    <dl class="info-rows">${rows}</dl>${info.county ? `<div class="muted">點擊查看${escapeHtml(info.county)}</div>` : ""}`;
+  card.hidden = false;
+  placeCard(card, position);
+}
+
 function showHover(name, position) {
+  state.hoverCounty = name;
+  if (state.info) return;
   const card = $("hover");
   if (!name) {
     card.hidden = true;
@@ -153,10 +180,94 @@ function showHover(name, position) {
   }
   card.innerHTML = `<strong>${escapeHtml(name)}</strong>${body}<div class="muted">點擊查看詳細</div>`;
   card.hidden = false;
-  const stage = document.querySelector(".stage").getBoundingClientRect();
-  card.style.left = `${Math.min(position.x + 18, stage.width - card.offsetWidth - 10)}px`;
-  card.style.top = `${Math.min(position.y + 18, stage.height - card.offsetHeight - 10)}px`;
+  placeCard(card, position);
 }
+
+// ---------- data overlays ----------
+function miniLegend(legend) {
+  const stops = legend.stops;
+  const gradient = stops.map(([, c], i) => `${c} ${(i / (stops.length - 1)) * 100}%`).join(", ");
+  return `<div class="mini-legend"><span class="mini-title">${escapeHtml(legend.title)}</span>
+    <i style="background: linear-gradient(90deg, ${gradient})"></i>
+    <span class="ticks">${stops.map(([v]) => `<b>${v}</b>`).join("")}</span></div>`;
+}
+
+function setOverlayStatus(name, text, { error = false, busy = false } = {}) {
+  const row = document.querySelector(`.toggle[data-overlay="${name}"]`);
+  const note = row.querySelector("small");
+  note.textContent = text || note.dataset.note;
+  row.classList.toggle("error", error);
+  row.classList.toggle("busy", busy);
+  row.nextElementSibling?.classList.contains("mini-legend") && row.nextElementSibling.remove();
+  const legend = state.globe?.overlayLegend(name);
+  if (legend && row.querySelector("input").checked && !error && !busy) row.insertAdjacentHTML("afterend", miniLegend(legend));
+}
+
+$("overlays").addEventListener("change", async (event) => {
+  const input = event.target.closest("input[data-overlay]");
+  if (!input || !state.globe) return;
+  const name = input.dataset.overlay;
+  if (!input.checked) {
+    await state.globe.setOverlay(name, false);
+    setOverlayStatus(name, "");
+    return;
+  }
+  setOverlayStatus(name, "載入中…", { busy: true });
+  try {
+    const status = await state.globe.setOverlay(name, true);
+    if (input.checked) setOverlayStatus(name, status);
+  } catch (error) {
+    input.checked = false;
+    setOverlayStatus(name, error.message, { error: true });
+  }
+});
+
+// ---------- 3D: buildings and the shadow simulation ----------
+$("buildings").addEventListener("change", async (event) => {
+  const on = event.target.checked;
+  try {
+    await state.globe?.setBuildings(on);
+  } catch (error) {
+    event.target.checked = false;
+    $("buildings-note").textContent = error.message;
+  }
+});
+
+const simCities = new Segmented($("sim-cities"), {
+  onChange: (city) => {
+    state.simCity = city;
+    state.globe?.startShadowSimulation(city);
+  },
+});
+
+async function setSimulation(on) {
+  const button = $("shadow-sim");
+  button.setAttribute("aria-pressed", String(on));
+  button.querySelector(".sim-label").textContent = on ? "結束陰影模擬" : "建築陰影模擬";
+  $("sim-cities").hidden = !on;
+  if (on) {
+    simCities.place(false);
+    // The city picker sits at the foot of the controls card; bring it into view.
+    $("sim-cities").scrollIntoView({ block: "nearest", behavior: "smooth" });
+    $("buildings").checked = true;
+    if (state.region) closeRegion();
+    await state.globe.startShadowSimulation(state.simCity);
+    // Start in the morning, when shadows are long, and play the day.
+    setClock(7 * 60);
+    setPlaying(true);
+  } else {
+    setPlaying(false);
+    state.globe.stopShadowSimulation();
+  }
+}
+
+$("shadow-sim").addEventListener("click", () => {
+  if (!state.globe?.hasTerrain) {
+    $("buildings-note").textContent = "陰影模擬需要 Cesium ion token。";
+    return;
+  }
+  setSimulation($("shadow-sim").getAttribute("aria-pressed") !== "true").catch(showError);
+});
 
 // ---------- fallback when WebGL or Cesium is unavailable ----------
 function renderFallbackTiles() {
@@ -223,6 +334,29 @@ document.addEventListener("keydown", (event) => {
 
 // The slider simulates today's sun and moon in Taipei time, and the glass
 // follows: clearer by day, warmer at dusk, deeper at night.
+// Move the sun clock to a minute of the day, as if the slider were dragged.
+function setClock(minutes) {
+  const slider = $("clock");
+  slider.value = String(minutes);
+  slider.dispatchEvent(new Event("input"));
+}
+
+// Playing sweeps the sun across the day, ten minutes a step, and loops.
+function setPlaying(on) {
+  clearInterval(state.playTimer);
+  state.playTimer = null;
+  $("clock-play").setAttribute("aria-pressed", String(on));
+  $("clock-play").textContent = on ? "❚❚" : "▶";
+  $("clock-play").setAttribute("aria-label", on ? "暫停" : "播放一天的日照");
+  if (!on) return;
+  state.playTimer = setInterval(() => {
+    const next = Number($("clock").value) + 10;
+    setClock(next > 1439 ? 0 : next);
+  }, 90);
+}
+
+$("clock-play").addEventListener("click", () => setPlaying($("clock-play").getAttribute("aria-pressed") !== "true"));
+
 function sliderToDate(minutes) {
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
   const hh = String(Math.floor(minutes / 60)).padStart(2, "0");
@@ -254,6 +388,7 @@ $("clock").addEventListener("input", (event) => {
   state.globe?.setTime(date);
 });
 $("clock-now").addEventListener("click", () => {
+  setPlaying(false);
   syncSliderToNow();
   state.globe?.setTime(null);
 });
@@ -297,6 +432,10 @@ async function poll() {
       await loadLayer();
       await state.view?.refresh();
     }
+    if (state.globe) {
+      const statuses = await state.globe.refreshOverlays();
+      for (const [name, status] of Object.entries(statuses)) setOverlayStatus(name, status);
+    }
   } catch (error) {
     showError(error);
   }
@@ -320,10 +459,15 @@ async function start() {
       token,
       counties: state.meta?.counties ?? [],
       onHover: showHover,
+      onInfo: showInfo,
       onSelect: (name, position) => openRegion(name, { origin: position }),
     });
     document.querySelector(".credit").hidden = true;
     state.globe.setSky(document.body.dataset.sky);
+    if (!state.globe.hasTerrain) {
+      $("buildings").disabled = true;
+      $("buildings-note").textContent = "需要 Cesium ion token";
+    }
   } catch (error) {
     console.error(error);
     $("globe").hidden = true;
