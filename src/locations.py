@@ -25,6 +25,26 @@ REGION_COORDINATES = {
     "連江縣": (26.154204, 119.929303),
 }
 
-MAP_CENTER = (24.1, 120.35)
-MAP_ZOOM = 7
+MAP_CENTER = (18.0, 8.0)
+MAP_ZOOM = 1
 
+# Fast, keyless world city search. The 22 Taiwan city/county locations below
+# come from the actual CWA response; these additional capitals use region
+# representative points and are only map navigation shortcuts.
+WORLD_CITY_COORDINATES = {
+    "Tokyo": (35.6762, 139.6503),
+    "Seoul": (37.5665, 126.9780),
+    "Hong Kong": (22.3193, 114.1694),
+    "Singapore": (1.3521, 103.8198),
+    "Bangkok": (13.7563, 100.5018),
+    "Manila": (14.5995, 120.9842),
+    "Jakarta": (-6.2088, 106.8456),
+    "Sydney": (-33.8688, 151.2093),
+    "Mumbai": (19.0760, 72.8777),
+    "Dubai": (25.2048, 55.2708),
+    "London": (51.5072, -0.1276),
+    "Paris": (48.8566, 2.3522),
+    "New York": (40.7128, -74.0060),
+    "Los Angeles": (34.0522, -118.2437),
+    "São Paulo": (-23.5505, -46.6333),
+}

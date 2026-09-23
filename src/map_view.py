@@ -10,9 +10,9 @@ from src.locations import MAP_CENTER, MAP_ZOOM, REGION_COORDINATES
 from src.utils import TEMPERATURE_STYLES, format_update, get_temperature_category
 
 
-def create_base_map() -> folium.Map:
+def create_base_map(center=MAP_CENTER, zoom=MAP_ZOOM) -> folium.Map:
     return folium.Map(
-        location=MAP_CENTER, zoom_start=MAP_ZOOM, tiles="OpenStreetMap",
+        location=center, zoom_start=zoom, tiles="OpenStreetMap",
         control_scale=True, min_zoom=5, max_zoom=13,
         zoom_control=True, scroll_wheel_zoom=True,
     )

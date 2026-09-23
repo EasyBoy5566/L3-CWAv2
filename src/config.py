@@ -30,3 +30,16 @@ def get_api_key() -> str:
     except StreamlitSecretNotFoundError:
         return ""
 
+
+def get_windy_api_key() -> str:
+    """Windy Map Forecast is a browser SDK and uses a separate key."""
+    key = os.getenv("WINDY_API_KEY", "").strip()
+    if key:
+        return key
+    import streamlit as st
+    from streamlit.errors import StreamlitSecretNotFoundError
+
+    try:
+        return str(st.secrets.get("WINDY_API_KEY", "")).strip()
+    except StreamlitSecretNotFoundError:
+        return ""
