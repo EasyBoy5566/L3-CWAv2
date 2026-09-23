@@ -109,7 +109,7 @@ copy .env.example .env        # 填入 CWA_API_KEY，其餘可先留空
 
 1. **Turso**：建立資料庫，區域選 `aws-ap-northeast-1`（東京），取得 URL 並建立 token。把兩個值填進本機 `.env`，執行 `python -m scripts.init_db` 和 `python -m scripts.run_job all`，建立資料表並寫入第一批資料。
 2. **Cesium ion**：建立 access token，在 Allowed URLs 加入正式網域與 `http://localhost:5000`。
-3. **Vercel**：匯入 GitHub repository（Framework 選 Other），在 Environment Variables 設定上表四組變數後部署。`vercel.json` 已經設定部署區域 `hnd1` 與每日排程；Vercel 會自動偵測 `api/index.py` 裡的 Flask `app`。
+3. **Vercel**：匯入 GitHub repository（Framework 選 Flask），在 Environment Variables 設定上表五組變數後部署。`vercel.json` 已經設定部署區域 `hnd1` 與每日排程；Vercel 會自動偵測 `api/index.py` 裡的 Flask `app`。
 4. **cron-job.org**：建立兩個工作，Method 選 POST，Header 加上 `Authorization: Bearer <CRON_SECRET>`：
    - `https://<網域>/api/cron/observations`，每 10 分鐘
    - `https://<網域>/api/cron/forecasts`，每小時
