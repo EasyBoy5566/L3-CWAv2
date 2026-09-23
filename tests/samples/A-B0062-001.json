@@ -1,0 +1,650 @@
+{
+ "success": "true",
+ "result": {
+  "resource_id": "A-B0062-001",
+  "fields": [
+   {
+    "id": "CountyName",
+    "type": "String"
+   },
+   {
+    "id": "Date",
+    "type": "Date"
+   },
+   {
+    "id": "BeginCivilTwilightTime",
+    "type": "String"
+   },
+   {
+    "id": "SunRiseTime",
+    "type": "String"
+   },
+   {
+    "id": "SunRiseAZ",
+    "type": "String"
+   },
+   {
+    "id": "SunTransitTime",
+    "type": "String"
+   },
+   {
+    "id": "SunTransitAlt",
+    "type": "String"
+   },
+   {
+    "id": "SunSetTime",
+    "type": "String"
+   },
+   {
+    "id": "SunSetAZ",
+    "type": "String"
+   },
+   {
+    "id": "EndCivilTwilightTime",
+    "type": "String"
+   }
+  ]
+ },
+ "records": {
+  "dataid": "A-B0062-001",
+  "note": "全臺各縣市每天的日出、日沒及太陽過中天等時刻資料-含有日出日沒時之方位及過中天時之仰角資料",
+  "locations": {
+   "location": [
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:26",
+       "SunRiseTime": "05:48",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:51",
+       "SunTransitAlt": "66S",
+       "SunSetTime": "17:54",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:16"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:26",
+       "SunRiseTime": "05:48",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:51",
+       "SunTransitAlt": "66S",
+       "SunSetTime": "17:53",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:15"
+      }
+     ],
+     "CountyName": "嘉義縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:20",
+       "SunRiseTime": "05:43",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:46",
+       "SunTransitAlt": "65S",
+       "SunSetTime": "17:49",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:11"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:21",
+       "SunRiseTime": "05:44",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:46",
+       "SunTransitAlt": "64S",
+       "SunSetTime": "17:48",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:10"
+      }
+     ],
+     "CountyName": "新北市"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:25",
+       "SunRiseTime": "05:48",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:50",
+       "SunTransitAlt": "66S",
+       "SunSetTime": "17:53",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:16"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:25",
+       "SunRiseTime": "05:48",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:50",
+       "SunTransitAlt": "66S",
+       "SunSetTime": "17:52",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:14"
+      }
+     ],
+     "CountyName": "嘉義市"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:22",
+       "SunRiseTime": "05:45",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:48",
+       "SunTransitAlt": "65S",
+       "SunSetTime": "17:51",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:13"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:23",
+       "SunRiseTime": "05:46",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:48",
+       "SunTransitAlt": "64S",
+       "SunSetTime": "17:50",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:12"
+      }
+     ],
+     "CountyName": "新竹縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:23",
+       "SunRiseTime": "05:45",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:48",
+       "SunTransitAlt": "65S",
+       "SunSetTime": "17:51",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:14"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:23",
+       "SunRiseTime": "05:46",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:48",
+       "SunTransitAlt": "64S",
+       "SunSetTime": "17:50",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:13"
+      }
+     ],
+     "CountyName": "新竹市"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:20",
+       "SunRiseTime": "05:43",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:46",
+       "SunTransitAlt": "65S",
+       "SunSetTime": "17:49",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:11"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:21",
+       "SunRiseTime": "05:44",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:46",
+       "SunTransitAlt": "64S",
+       "SunSetTime": "17:48",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:10"
+      }
+     ],
+     "CountyName": "臺北市"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:26",
+       "SunRiseTime": "05:48",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:51",
+       "SunTransitAlt": "67S",
+       "SunSetTime": "17:54",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:16"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:26",
+       "SunRiseTime": "05:49",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:51",
+       "SunTransitAlt": "66S",
+       "SunSetTime": "17:53",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:15"
+      }
+     ],
+     "CountyName": "臺南市"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:19",
+       "SunRiseTime": "05:42",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:45",
+       "SunTransitAlt": "65S",
+       "SunSetTime": "17:48",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:10"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:20",
+       "SunRiseTime": "05:43",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:45",
+       "SunTransitAlt": "64S",
+       "SunSetTime": "17:47",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:09"
+      }
+     ],
+     "CountyName": "宜蘭縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:23",
+       "SunRiseTime": "05:46",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:49",
+       "SunTransitAlt": "65S",
+       "SunSetTime": "17:51",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:14"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:24",
+       "SunRiseTime": "05:46",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:48",
+       "SunTransitAlt": "65S",
+       "SunSetTime": "17:50",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:13"
+      }
+     ],
+     "CountyName": "苗栗縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:24",
+       "SunRiseTime": "05:47",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:50",
+       "SunTransitAlt": "66S",
+       "SunSetTime": "17:53",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:15"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:25",
+       "SunRiseTime": "05:47",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:50",
+       "SunTransitAlt": "66S",
+       "SunSetTime": "17:51",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:14"
+      }
+     ],
+     "CountyName": "雲林縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:20",
+       "SunRiseTime": "05:43",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:46",
+       "SunTransitAlt": "66S",
+       "SunSetTime": "17:48",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:11"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:20",
+       "SunRiseTime": "05:43",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:45",
+       "SunTransitAlt": "65S",
+       "SunSetTime": "17:47",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:10"
+      }
+     ],
+     "CountyName": "花蓮縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:24",
+       "SunRiseTime": "05:47",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:49",
+       "SunTransitAlt": "65S",
+       "SunSetTime": "17:52",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:15"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:24",
+       "SunRiseTime": "05:47",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:49",
+       "SunTransitAlt": "65S",
+       "SunSetTime": "17:51",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:14"
+      }
+     ],
+     "CountyName": "臺中市"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:22",
+       "SunRiseTime": "05:45",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:48",
+       "SunTransitAlt": "67S",
+       "SunSetTime": "17:50",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:13"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:22",
+       "SunRiseTime": "05:45",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:47",
+       "SunTransitAlt": "66S",
+       "SunSetTime": "17:49",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:12"
+      }
+     ],
+     "CountyName": "臺東縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:22",
+       "SunRiseTime": "05:45",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:48",
+       "SunTransitAlt": "65S",
+       "SunSetTime": "17:51",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:13"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:23",
+       "SunRiseTime": "05:45",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:48",
+       "SunTransitAlt": "64S",
+       "SunSetTime": "17:49",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:12"
+      }
+     ],
+     "CountyName": "桃園市"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:23",
+       "SunRiseTime": "05:46",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:49",
+       "SunTransitAlt": "66S",
+       "SunSetTime": "17:51",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:14"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:23",
+       "SunRiseTime": "05:46",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:48",
+       "SunTransitAlt": "65S",
+       "SunSetTime": "17:50",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:13"
+      }
+     ],
+     "CountyName": "南投縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:26",
+       "SunRiseTime": "05:48",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:51",
+       "SunTransitAlt": "67S",
+       "SunSetTime": "17:53",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:16"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:26",
+       "SunRiseTime": "05:48",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:51",
+       "SunTransitAlt": "66S",
+       "SunSetTime": "17:52",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:15"
+      }
+     ],
+     "CountyName": "高雄市"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:33",
+       "SunRiseTime": "05:56",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:59",
+       "SunTransitAlt": "65S",
+       "SunSetTime": "18:02",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:24"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:34",
+       "SunRiseTime": "05:56",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:59",
+       "SunTransitAlt": "65S",
+       "SunSetTime": "18:00",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:23"
+      }
+     ],
+     "CountyName": "金門縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:25",
+       "SunRiseTime": "05:47",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:50",
+       "SunTransitAlt": "67S",
+       "SunSetTime": "17:53",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:15"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:25",
+       "SunRiseTime": "05:48",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:50",
+       "SunTransitAlt": "66S",
+       "SunSetTime": "17:52",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:14"
+      }
+     ],
+     "CountyName": "屏東縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:19",
+       "SunRiseTime": "05:42",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:45",
+       "SunTransitAlt": "64S",
+       "SunSetTime": "17:48",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:11"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:20",
+       "SunRiseTime": "05:43",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:45",
+       "SunTransitAlt": "64S",
+       "SunSetTime": "17:47",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:09"
+      }
+     ],
+     "CountyName": "基隆市"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:28",
+       "SunRiseTime": "05:51",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:54",
+       "SunTransitAlt": "66S",
+       "SunSetTime": "17:56",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:19"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:29",
+       "SunRiseTime": "05:51",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:54",
+       "SunTransitAlt": "66S",
+       "SunSetTime": "17:55",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:18"
+      }
+     ],
+     "CountyName": "澎湖縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:24",
+       "SunRiseTime": "05:47",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:50",
+       "SunTransitAlt": "66S",
+       "SunSetTime": "17:52",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:15"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:25",
+       "SunRiseTime": "05:47",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:49",
+       "SunTransitAlt": "65S",
+       "SunSetTime": "17:51",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:14"
+      }
+     ],
+     "CountyName": "彰化縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "BeginCivilTwilightTime": "05:26",
+       "SunRiseTime": "05:50",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:52",
+       "SunTransitAlt": "63S",
+       "SunSetTime": "17:55",
+       "SunSetAZ": "270",
+       "EndCivilTwilightTime": "18:18"
+      },
+      {
+       "Date": "2026-09-25",
+       "BeginCivilTwilightTime": "05:27",
+       "SunRiseTime": "05:50",
+       "SunRiseAZ": "90",
+       "SunTransitTime": "11:52",
+       "SunTransitAlt": "63S",
+       "SunSetTime": "17:54",
+       "SunSetAZ": "269",
+       "EndCivilTwilightTime": "18:17"
+      }
+     ],
+     "CountyName": "連江縣"
+    }
+   ]
+  }
+ }
+}

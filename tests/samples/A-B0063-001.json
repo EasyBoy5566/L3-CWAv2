@@ -1,0 +1,554 @@
+{
+ "success": "true",
+ "result": {
+  "resource_id": "A-B0063-001",
+  "fields": [
+   {
+    "id": "CountyName",
+    "type": "String"
+   },
+   {
+    "id": "Date",
+    "type": "Date"
+   },
+   {
+    "id": "MoonRiseTime",
+    "type": "String"
+   },
+   {
+    "id": "MoonRiseAZ",
+    "type": "String"
+   },
+   {
+    "id": "MoonTransitTime",
+    "type": "String"
+   },
+   {
+    "id": "MoonTransitAlt",
+    "type": "String"
+   },
+   {
+    "id": "MoonSetTime",
+    "type": "String"
+   },
+   {
+    "id": "MoonSetAZ",
+    "type": "String"
+   }
+  ]
+ },
+ "records": {
+  "dataid": "A-B0063-001",
+  "note": "全臺各縣市每天的月出、月沒及月球過中天等時刻資料-含有月出月沒時之方位及過中天時之仰角資料",
+  "locations": {
+   "location": [
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:23",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:15",
+       "MoonTransitAlt": "57S",
+       "MoonSetTime": "03:17",
+       "MoonSetAZ": "255"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "16:56",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "22:59",
+       "MoonTransitAlt": "63S",
+       "MoonSetTime": "04:12",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "嘉義縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:19",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:10",
+       "MoonTransitAlt": "56S",
+       "MoonSetTime": "03:10",
+       "MoonSetAZ": "255"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "16:51",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "22:54",
+       "MoonTransitAlt": "62S",
+       "MoonSetTime": "04:06",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "新北市"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:22",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:14",
+       "MoonTransitAlt": "57S",
+       "MoonSetTime": "03:16",
+       "MoonSetAZ": "255"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "16:55",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "22:58",
+       "MoonTransitAlt": "63S",
+       "MoonSetTime": "04:11",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "嘉義市"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:21",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:12",
+       "MoonTransitAlt": "56S",
+       "MoonSetTime": "03:12",
+       "MoonSetAZ": "255"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "16:53",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "22:56",
+       "MoonTransitAlt": "62S",
+       "MoonSetTime": "04:08",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "新竹縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:21",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:12",
+       "MoonTransitAlt": "56S",
+       "MoonSetTime": "03:12",
+       "MoonSetAZ": "255"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "16:54",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "22:56",
+       "MoonTransitAlt": "62S",
+       "MoonSetTime": "04:08",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "新竹市"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:19",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:10",
+       "MoonTransitAlt": "56S",
+       "MoonSetTime": "03:10",
+       "MoonSetAZ": "255"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "16:51",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "22:54",
+       "MoonTransitAlt": "62S",
+       "MoonSetTime": "04:06",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "臺北市"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:23",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:15",
+       "MoonTransitAlt": "58S",
+       "MoonSetTime": "03:18",
+       "MoonSetAZ": "256"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "16:56",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "22:59",
+       "MoonTransitAlt": "64S",
+       "MoonSetTime": "04:12",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "臺南市"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:18",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:09",
+       "MoonTransitAlt": "56S",
+       "MoonSetTime": "03:09",
+       "MoonSetAZ": "255"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "16:50",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "22:53",
+       "MoonTransitAlt": "62S",
+       "MoonSetTime": "04:05",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "宜蘭縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:22",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:12",
+       "MoonTransitAlt": "56S",
+       "MoonSetTime": "03:13",
+       "MoonSetAZ": "255"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "16:54",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "22:56",
+       "MoonTransitAlt": "62S",
+       "MoonSetTime": "04:09",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "苗栗縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:22",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:14",
+       "MoonTransitAlt": "57S",
+       "MoonSetTime": "03:15",
+       "MoonSetAZ": "255"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "16:55",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "22:58",
+       "MoonTransitAlt": "63S",
+       "MoonSetTime": "04:11",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "雲林縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:18",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:09",
+       "MoonTransitAlt": "57S",
+       "MoonSetTime": "03:10",
+       "MoonSetAZ": "255"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "16:51",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "22:53",
+       "MoonTransitAlt": "63S",
+       "MoonSetTime": "04:06",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "花蓮縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:22",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:13",
+       "MoonTransitAlt": "56S",
+       "MoonSetTime": "03:14",
+       "MoonSetAZ": "255"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "16:54",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "22:57",
+       "MoonTransitAlt": "63S",
+       "MoonSetTime": "04:10",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "臺中市"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:19",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:11",
+       "MoonTransitAlt": "58S",
+       "MoonSetTime": "03:14",
+       "MoonSetAZ": "256"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "16:52",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "22:55",
+       "MoonTransitAlt": "64S",
+       "MoonSetTime": "04:09",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "臺東縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:21",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:11",
+       "MoonTransitAlt": "56S",
+       "MoonSetTime": "03:12",
+       "MoonSetAZ": "255"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "16:53",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "22:56",
+       "MoonTransitAlt": "62S",
+       "MoonSetTime": "04:08",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "桃園市"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:21",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:12",
+       "MoonTransitAlt": "57S",
+       "MoonSetTime": "03:14",
+       "MoonSetAZ": "255"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "16:53",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "22:56",
+       "MoonTransitAlt": "63S",
+       "MoonSetTime": "04:09",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "南投縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:22",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:15",
+       "MoonTransitAlt": "58S",
+       "MoonSetTime": "03:17",
+       "MoonSetAZ": "256"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "16:55",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "22:59",
+       "MoonTransitAlt": "64S",
+       "MoonSetTime": "04:12",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "高雄市"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:32",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:23",
+       "MoonTransitAlt": "56S",
+       "MoonSetTime": "03:24",
+       "MoonSetAZ": "255"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "17:04",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "23:07",
+       "MoonTransitAlt": "63S",
+       "MoonSetTime": "04:19",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "金門縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:21",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:14",
+       "MoonTransitAlt": "58S",
+       "MoonSetTime": "03:17",
+       "MoonSetAZ": "256"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "16:55",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "22:58",
+       "MoonTransitAlt": "64S",
+       "MoonSetTime": "04:11",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "屏東縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:18",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:09",
+       "MoonTransitAlt": "55S",
+       "MoonSetTime": "03:09",
+       "MoonSetAZ": "255"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "16:50",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "22:53",
+       "MoonTransitAlt": "62S",
+       "MoonSetTime": "04:05",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "基隆市"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "06:28",
+       "MoonRiseAZ": "106",
+       "MoonTransitTime": "12:34",
+       "MoonTransitAlt": "49S",
+       "MoonSetTime": "18:35",
+       "MoonSetAZ": "251"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "07:25",
+       "MoonRiseAZ": "112",
+       "MoonTransitTime": "13:19",
+       "MoonTransitAlt": "44S",
+       "MoonSetTime": "19:08",
+       "MoonSetAZ": "246"
+      }
+     ],
+     "CountyName": "澎湖縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:22",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:13",
+       "MoonTransitAlt": "57S",
+       "MoonSetTime": "03:15",
+       "MoonSetAZ": "255"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "16:55",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "22:57",
+       "MoonTransitAlt": "63S",
+       "MoonSetTime": "04:10",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "彰化縣"
+    },
+    {
+     "time": [
+      {
+       "Date": "2026-09-24",
+       "MoonRiseTime": "16:27",
+       "MoonRiseAZ": "101",
+       "MoonTransitTime": "22:16",
+       "MoonTransitAlt": "54S",
+       "MoonSetTime": "03:15",
+       "MoonSetAZ": "255"
+      },
+      {
+       "Date": "2026-09-25",
+       "MoonRiseTime": "16:58",
+       "MoonRiseAZ": "95",
+       "MoonTransitTime": "23:00",
+       "MoonTransitAlt": "61S",
+       "MoonSetTime": "04:11",
+       "MoonSetAZ": "262"
+      }
+     ],
+     "CountyName": "連江縣"
+    }
+   ]
+  }
+ }
+}
