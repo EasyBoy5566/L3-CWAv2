@@ -58,6 +58,26 @@ def test_region_detail(client, loaded):
     assert client.get("/api/region/Atlantis").status_code == 404
 
 
+@pytest.mark.parametrize("raw", [
+    "新北市",
+    quote("新北市"),                                   # still percent-encoded
+    "新北市".encode("utf-8").decode("latin-1"),        # UTF-8 bytes read as Latin-1
+    quote("新北市").encode().decode("latin-1"),
+])
+def test_county_segment_survives_proxy_encodings(raw):
+    from app.routes import county_from_path
+
+    assert county_from_path(raw) == "新北市"
+    assert county_from_path("Atlantis") is None
+
+
+def test_double_encoded_region_path_resolves(client, loaded):
+    # A segment that reaches Flask still encoded, as behind Vercel's runtime.
+    encoded_twice = quote(quote("新北市"))
+    assert client.get(f"/api/region/{encoded_twice}").get_json()["name"] == "新北市"
+    assert client.get(f"/region/{encoded_twice}").status_code == 200
+
+
 def test_old_observations_are_not_called_current(client, loaded, cwa, clock):
     cwa.overrides["O-A0003-001"] = APIRequestError("down")
     clock(FROZEN + timedelta(hours=4))

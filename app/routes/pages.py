@@ -4,7 +4,8 @@ globe's panel and the standalone region page render through the same code."""
 from flask import Blueprint, abort, make_response, render_template
 
 from app import config
-from etl.counties import COUNTIES, is_county
+from app.routes import county_from_path
+from etl.counties import COUNTIES
 
 bp = Blueprint("pages", __name__)
 
@@ -27,6 +28,7 @@ def index():
 
 @bp.get("/region/<name>")
 def region(name: str):
-    if not is_county(name):
+    county = county_from_path(name)
+    if county is None:
         abort(404)
-    return _page("region.html", region=name)
+    return _page("region.html", region=county)

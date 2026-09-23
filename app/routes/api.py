@@ -12,7 +12,8 @@ from flask import Blueprint, abort, jsonify, request
 from app import config, freshness, queries
 from app.db import get_database
 from app.errors import WeatherError
-from etl.counties import DEFAULT_COUNTY, is_county
+from app.routes import county_from_path
+from etl.counties import DEFAULT_COUNTY
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -27,8 +28,9 @@ def _cached(payload: dict, seconds: int):
     return response
 
 
-def _county(name: str) -> str:
-    if not is_county(name):
+def _county(raw: str) -> str:
+    name = county_from_path(raw)
+    if name is None:
         abort(404)
     return name
 
