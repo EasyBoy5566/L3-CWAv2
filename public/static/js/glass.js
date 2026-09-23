@@ -250,3 +250,168 @@ export function setSky(date = new Date()) {
 }
 
 export const prefersReducedMotion = () => reducedMotion.matches;
+
+// ---------------------------------------------------------------------------
+// Glass select. A native <select> cannot be styled when open and shows the
+// platform's scrollbar, so it is kept hidden as the source of truth (value,
+// options, disabled, the change event) and drawn as a glass trigger and a
+// glass menu. Callers that change the select in code call sync().
+//
+// The menu lives on <body>, positioned against its trigger: an element with
+// a backdrop filter only blurs what is inside its nearest glass ancestor, so
+// a menu inside the controls card would lose its blur where it hangs over
+// the map.
+
+let openSelect = null;
+document.addEventListener("pointerdown", (event) => {
+  if (openSelect && !openSelect.root.contains(event.target) && !openSelect.menu.contains(event.target)) openSelect.close();
+});
+window.addEventListener("resize", () => openSelect?.close());
+
+export class GlassSelect {
+  constructor(select, { columns = 1, placeholder = "" } = {}) {
+    this.select = select;
+    this.columns = columns;
+    this.placeholder = placeholder;
+    this.root = document.createElement("div");
+    this.root.className = "gselect";
+    select.after(this.root);
+    select.classList.add("gselect-native");
+    select.tabIndex = -1;
+    select.setAttribute("aria-hidden", "true");
+
+    this.trigger = document.createElement("button");
+    this.trigger.type = "button";
+    this.trigger.className = "gselect-trigger";
+    this.trigger.setAttribute("aria-haspopup", "listbox");
+    this.trigger.setAttribute("aria-expanded", "false");
+    const label = select.getAttribute("aria-label") || select.closest("label")?.querySelector(".control-title")?.textContent;
+    if (label) this.trigger.setAttribute("aria-label", label);
+    this.menu = document.createElement("ul");
+    this.menu.className = "gselect-menu glass";
+    this.menu.setAttribute("role", "listbox");
+    this.menu.style.setProperty("--columns", columns);
+    this.menu.hidden = true;
+    this.root.append(this.trigger);
+    document.body.append(this.menu);
+
+    this.trigger.addEventListener("click", () => (this.isOpen ? this.close() : this.open()));
+    this.trigger.addEventListener("keydown", (event) => this.onKey(event));
+    this.menu.addEventListener("keydown", (event) => this.onKey(event));
+    this.menu.addEventListener("click", (event) => {
+      const item = event.target.closest("li[data-value]");
+      if (item) this.choose(item.dataset.value);
+    });
+    this.sync();
+  }
+
+  get isOpen() {
+    return !this.menu.hidden;
+  }
+
+  options() {
+    return [...this.select.options].filter((o) => o.value !== "");
+  }
+
+  sync() {
+    const current = this.select.selectedOptions[0];
+    const text = current && current.value !== "" ? current.textContent : this.placeholder || current?.textContent || "";
+    this.trigger.innerHTML = `<span class="gselect-value">${text}</span><svg class="gselect-chevron" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+    this.trigger.classList.toggle("empty", !current || current.value === "");
+    this.trigger.disabled = this.select.disabled;
+    this.root.classList.toggle("disabled", this.select.disabled);
+    this.menu.innerHTML = this.options().map((o) =>
+      `<li role="option" tabindex="-1" data-value="${o.value}" aria-selected="${o.value === this.select.value}">${o.textContent}</li>`).join("");
+    if (this.select.disabled && this.isOpen) this.close();
+  }
+
+  open() {
+    if (this.select.disabled) return;
+    openSelect?.close();
+    openSelect = this;
+    this.sync();
+    // Open upward when there is not enough room below (the dock sits at the bottom).
+    const rect = this.trigger.getBoundingClientRect();
+    const up = window.innerHeight - rect.bottom < 280 && rect.top > window.innerHeight / 2;
+    this.menu.classList.toggle("up", up);
+    Object.assign(this.menu.style, {
+      minWidth: `${rect.width}px`,
+      left: `${rect.left}px`,
+      top: up ? "auto" : `${rect.bottom + 8}px`,
+      bottom: up ? `${window.innerHeight - rect.top + 10}px` : "auto",
+    });
+    this.menu.hidden = false;
+    // Keep it on screen when the trigger sits near the right edge.
+    const overflow = this.menu.getBoundingClientRect().right - (window.innerWidth - 12);
+    if (overflow > 0) this.menu.style.left = `${rect.left - overflow}px`;
+    this.root.classList.add("open");
+    this.trigger.setAttribute("aria-expanded", "true");
+    refract(this.menu);
+    const selected = this.menu.querySelector('[aria-selected="true"]') ?? this.menu.querySelector("li");
+    selected?.focus({ preventScroll: true });
+    selected?.scrollIntoView({ block: "nearest" });
+    if (!reducedMotion.matches) {
+      this.menu.animate(
+        [
+          { opacity: 0, transform: "scale(0.9, 0.82)", filter: "blur(4px)" },
+          { opacity: 1, transform: "scale(1.02, 1.03)", filter: "blur(0)", offset: 0.7 },
+          { opacity: 1, transform: "scale(1)" },
+        ],
+        { duration: 320, easing: "cubic-bezier(.2, .8, .2, 1)" },
+      );
+    }
+  }
+
+  close({ focus = false } = {}) {
+    if (!this.isOpen) return;
+    this.menu.hidden = true;
+    this.root.classList.remove("open");
+    this.trigger.setAttribute("aria-expanded", "false");
+    if (openSelect === this) openSelect = null;
+    if (focus) this.trigger.focus();
+  }
+
+  choose(value) {
+    this.close({ focus: true });
+    if (value === this.select.value) return;
+    this.select.value = value;
+    this.sync();
+    this.select.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  onKey(event) {
+    const items = [...this.menu.querySelectorAll("li")];
+    const index = items.indexOf(document.activeElement);
+    const move = (delta) => {
+      event.preventDefault();
+      if (!this.isOpen) return this.open();
+      const next = items[Math.min(Math.max((index < 0 ? 0 : index + delta), 0), items.length - 1)];
+      next?.focus();
+      next?.scrollIntoView({ block: "nearest" });
+    };
+    switch (event.key) {
+      case "ArrowDown": return move(this.columns);
+      case "ArrowUp": return move(-this.columns);
+      case "ArrowRight": return this.isOpen ? move(1) : undefined;
+      case "ArrowLeft": return this.isOpen ? move(-1) : undefined;
+      case "Enter":
+      case " ":
+        event.preventDefault();
+        if (this.isOpen && index >= 0) this.choose(items[index].dataset.value);
+        else if (!this.isOpen) this.open();
+        return undefined;
+      case "Escape":
+        if (this.isOpen) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.close({ focus: true });
+        }
+        return undefined;
+      case "Tab":
+        this.close();
+        return undefined;
+      default:
+        return undefined;
+    }
+  }
+}

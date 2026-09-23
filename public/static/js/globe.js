@@ -5,6 +5,8 @@ import { Bubbles } from "./bubbles.js";
 import { BOUNDS, bordersCanvas, countyAt, highlightCanvas, loadCounties } from "./geo.js";
 
 const HOME = { lon: 120.95, lat: 23.65, heading: -12, pitch: -42, range: 560000 };
+// What the 2D map frames: the main island with Penghu, Kinmen and Matsu.
+const TAIWAN_2D = [117.9, 21.7, 122.6, 26.5];
 const EXAGGERATION = 2.5;
 
 // Bubble anchors inside each county, spread so the crowded north and the
@@ -86,7 +88,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   scene.sun.show = true;
   viewer.shadowMap.softShadows = true;
   viewer.shadowMap.size = 2048;
-  viewer.creditDisplay.addStaticCredit(new Cesium.Credit("資料：中央氣象署開放資料 · 縣市界：內政部國土測繪中心", true));
+  viewer.creditDisplay.addStaticCredit(new Cesium.Credit("資料：中央氣象署開放資料 · 縣市界：內政部國土測繪中心", false));
   viewer.clock.currentTime = Cesium.JulianDate.now();
   viewer.clock.clockStep = Cesium.ClockStep.SYSTEM_CLOCK;
 
@@ -219,6 +221,10 @@ export async function createGlobe(element, { token, counties: countyList, onHove
 
   // ---------- camera ----------
   const flyHome = (duration = 1.5) => {
+    if (scene.mode === Cesium.SceneMode.SCENE2D) {
+      viewer.camera.flyTo({ destination: Cesium.Rectangle.fromDegrees(...TAIWAN_2D), duration });
+      return;
+    }
     viewer.camera.flyToBoundingSphere(
       new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(HOME.lon, HOME.lat), 1),
       {
@@ -311,9 +317,17 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       scene.requestRender();
     },
 
+    // A morph resets the camera to the whole globe, so frame Taiwan once it lands.
     setMode2D(on) {
-      if (on) scene.morphTo2D(1.0);
-      else scene.morphTo3D(1.0);
+      const land = () => {
+        scene.morphComplete.removeEventListener(land);
+        if (on) viewer.camera.setView({ destination: Cesium.Rectangle.fromDegrees(...TAIWAN_2D) });
+        else flyHome(0);
+        scene.requestRender();
+      };
+      scene.morphComplete.addEventListener(land);
+      if (on) scene.morphTo2D(0.8);
+      else scene.morphTo3D(0.8);
     },
   };
 }

@@ -1,7 +1,7 @@
 // The globe page: layers, dates, the county panel, the sun clock and polling.
 import { getJSON } from "./api.js";
 import { dayLabel, escapeHtml, hhmm, num } from "./format.js";
-import { Segmented, prefersReducedMotion, refract, setSky } from "./glass.js";
+import { GlassSelect, Segmented, prefersReducedMotion, refract, setSky } from "./glass.js";
 import { createGlobe } from "./globe.js";
 import { renderFreshness, renderSky } from "./header.js";
 import { RegionView } from "./panel.js";
@@ -9,6 +9,16 @@ import { MISSING, colorAt, renderLegend, scaleFor } from "./scale.js";
 
 const POLL_MS = 3 * 60 * 1000;
 const $ = (id) => document.getElementById(id);
+
+// Both menus are drawn in glass; the hidden <select>s stay the source of truth.
+const menus = {
+  county: new GlassSelect($("county"), { columns: 2, placeholder: "選擇縣市…" }),
+  date: new GlassSelect($("date")),
+};
+const setCounty = (value) => {
+  $("county").value = value;
+  menus.county.sync();
+};
 
 const state = {
   layer: "now",
@@ -99,7 +109,7 @@ function openRegion(name, { push = true, fly = true, origin = null } = {}) {
     state.view.load();
   }
   revealPanel(origin);
-  $("county").value = name;
+  setCounty(name);
   state.globe?.select(name);
   if (fly) state.globe?.flyTo(name, { panelOpen: true });
   if (push) history.pushState({ region: name }, "", `/?region=${encodeURIComponent(name)}`);
@@ -111,7 +121,7 @@ function closeRegion({ push = true } = {}) {
   hidePanel();
   state.view?.dispose();
   state.view = null;
-  $("county").value = "";
+  setCounty("");
   state.globe?.select(null);
   if (push) history.pushState({ region: null }, "", "/");
   document.title = "臺灣 3D 氣象";
@@ -184,6 +194,7 @@ function syncStepper() {
   $("date-prev").disabled = live || index <= 0;
   $("date-next").disabled = live || index < 0 || index >= select.options.length - 1;
   $("stepper").title = live ? "即時圖層不需選擇日期" : "";
+  menus.date.sync();
 }
 
 function stepDate(delta) {
