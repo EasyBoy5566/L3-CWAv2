@@ -5,6 +5,7 @@ import { GlassSelect, Segmented, prefersReducedMotion, refract, setSky } from ".
 import { createGlobe } from "./globe.js";
 import { renderFreshness, renderSky } from "./header.js";
 import { RegionView } from "./panel.js";
+import { SECTIONS, TownData } from "./town-data.js";
 import { MISSING, colorAt, renderLegend, scaleFor } from "./scale.js";
 
 const POLL_MS = 3 * 60 * 1000;
@@ -15,6 +16,8 @@ const menus = {
   county: new GlassSelect($("county"), { columns: 2, placeholder: "選擇縣市…" }),
   date: new GlassSelect($("date")),
 };
+const townData = new TownData();
+
 const setCounty = (value) => {
   $("county").value = value;
   menus.county.sync();
@@ -32,6 +35,7 @@ const state = {
   simulated: null, // a Date while the sun clock is dragged, else null (live)
   info: null, // the overlay entity under the pointer, if any
   hoverCounty: null,
+  town: null, // the township whose card is open
   playTimer: null,
   simCity: "taipei",
 };
@@ -104,7 +108,30 @@ function hidePanel() {
   animation.onfinish = () => { if (!state.region) panel.hidden = true; };
 }
 
-function openRegion(name, { push = true, fly = true, origin = null } = {}) {
+const regionUrl = (county, town) => `/?${new URLSearchParams(town ? { region: county, town: town.town } : { region: county })}`;
+
+function enabledSections() {
+  return [...document.querySelectorAll("#town-sections input:checked")].map((input) => input.dataset.section);
+}
+
+function showTown(town) {
+  state.town = town;
+  state.globe?.select(state.region, town?.town);
+  if (!town) {
+    state.view?.hideTown();
+    return;
+  }
+  state.view?.showTown(town, townData, enabledSections(), {
+    onClose: () => {
+      state.town = null;
+      state.globe?.select(state.region);
+      history.pushState({}, "", regionUrl(state.region));
+    },
+  });
+}
+
+// A township click keeps the camera where it is: the user is already close.
+function openRegion(name, { push = true, fly = true, origin = null, town = null } = {}) {
   if (!name) return closeRegion({ push });
   if (state.region !== name) {
     state.view?.dispose();
@@ -114,10 +141,12 @@ function openRegion(name, { push = true, fly = true, origin = null } = {}) {
   }
   revealPanel(origin);
   setCounty(name);
-  state.globe?.select(name);
-  if (fly) state.globe?.flyTo(name, { panelOpen: true });
-  if (push) history.pushState({ region: name }, "", `/?region=${encodeURIComponent(name)}`);
-  document.title = `${name} · 臺灣 3D 氣象`;
+  showTown(town);
+  // A click on the map is already close; a township from a link or history flies in.
+  if (fly && !town) state.globe?.flyTo(name, { panelOpen: true });
+  else if (fly && town && !origin) state.globe?.flyToTown(town, { panelOpen: true });
+  if (push) history.pushState({}, "", regionUrl(name, town));
+  document.title = `${town ? town.town + " · " : ""}${name} · 臺灣 3D 氣象`;
 }
 
 function closeRegion({ push = true } = {}) {
@@ -125,15 +154,21 @@ function closeRegion({ push = true } = {}) {
   hidePanel();
   state.view?.dispose();
   state.view = null;
+  state.town = null;
   setCounty("");
   state.globe?.select(null);
   if (push) history.pushState({ region: null }, "", "/");
   document.title = "臺灣 3D 氣象";
 }
 
+const townFromUrl = (county) => {
+  const name = new URLSearchParams(location.search).get("town");
+  return name && state.globe ? state.globe.town(county, name) : null;
+};
+
 window.addEventListener("popstate", () => {
   const name = new URLSearchParams(location.search).get("region");
-  if (name) openRegion(name, { push: false });
+  if (name) openRegion(name, { push: false, town: townFromUrl(name) });
   else closeRegion({ push: false });
 });
 
@@ -144,7 +179,7 @@ function placeCard(card, position) {
   card.style.top = `${Math.min(position.y + 18, stage.height - card.offsetHeight - 10)}px`;
 }
 
-// A station, township or typhoon under the pointer takes the card from the county.
+// The typhoon under the pointer takes the card from the county.
 function showInfo(info, position) {
   state.info = info;
   const card = $("hover");
@@ -154,17 +189,27 @@ function showInfo(info, position) {
   }
   const rows = info.lines.map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd>${value}</dd>`).join("");
   card.innerHTML = `<strong>${escapeHtml(info.title ?? "")}</strong><div class="muted">${escapeHtml(info.sub ?? "")}</div>
-    <dl class="info-rows">${rows}</dl>${info.county ? `<div class="muted">點擊查看${escapeHtml(info.county)}</div>` : ""}`;
+    <dl class="info-rows">${rows}</dl>`;
   card.hidden = false;
   placeCard(card, position);
 }
 
-function showHover(name, position) {
+function showHover(name, position, town = null) {
   state.hoverCounty = name;
   if (state.info) return;
   const card = $("hover");
   if (!name) {
     card.hidden = true;
+    return;
+  }
+  const forecast = town ? townData.peekForecast(town.county, town.town) : null;
+  if (town) {
+    const body = forecast
+      ? `<div class="value">${num(forecast.t, 0, "°C")}</div><div>${escapeHtml(forecast.wx ?? "")}${forecast.pop === null ? "" : ` · 降雨 ${num(forecast.pop)}%`}</div><div class="muted">鄉鎮逐時預報</div>`
+      : "";
+    card.innerHTML = `<strong>${escapeHtml(town.town)}</strong><div class="muted">${escapeHtml(name)}</div>${body}<div class="muted">點擊查看鄉鎮資料</div>`;
+    card.hidden = false;
+    placeCard(card, position);
     return;
   }
   const entry = state.values[name];
@@ -183,31 +228,44 @@ function showHover(name, position) {
   placeCard(card, position);
 }
 
-// ---------- data overlays ----------
-function miniLegend(legend) {
-  const stops = legend.stops;
-  const gradient = stops.map(([, c], i) => `${c} ${(i / (stops.length - 1)) * 100}%`).join(", ");
-  return `<div class="mini-legend"><span class="mini-title">${escapeHtml(legend.title)}</span>
-    <i style="background: linear-gradient(90deg, ${gradient})"></i>
-    <span class="ticks">${stops.map(([v]) => `<b>${v}</b>`).join("")}</span></div>`;
-}
-
-function countOverlays() {
-  const on = document.querySelectorAll("#overlays input:checked").length;
-  $("overlay-count").textContent = on ? ` · ${on}` : "";
-}
-
+// ---------- map layers ----------
 function setOverlayStatus(name, text, { error = false, busy = false } = {}) {
-  countOverlays();
   const row = document.querySelector(`.toggle[data-overlay="${name}"]`);
   const note = row.querySelector("small");
   note.textContent = text || note.dataset.note;
   row.classList.toggle("error", error);
   row.classList.toggle("busy", busy);
-  row.nextElementSibling?.classList.contains("mini-legend") && row.nextElementSibling.remove();
-  const legend = state.globe?.overlayLegend(name);
-  if (legend && row.querySelector("input").checked && !error && !busy) row.insertAdjacentHTML("afterend", miniLegend(legend));
 }
+
+$("town-borders").addEventListener("change", (event) => state.globe?.setTownBorders(event.target.checked));
+
+// ---------- township card sections ----------
+const SECTION_KEY = "town-sections";
+
+function countSections() {
+  const on = enabledSections().length;
+  $("section-count").textContent = ` · ${on}/${Object.keys(SECTIONS).length}`;
+}
+
+try {
+  const saved = JSON.parse(localStorage.getItem(SECTION_KEY) ?? "null");
+  if (Array.isArray(saved)) {
+    for (const input of document.querySelectorAll("#town-sections input")) input.checked = saved.includes(input.dataset.section);
+  }
+} catch {
+  // Private windows may refuse storage; every section stays on.
+}
+countSections();
+
+$("town-sections").addEventListener("change", () => {
+  countSections();
+  try {
+    localStorage.setItem(SECTION_KEY, JSON.stringify(enabledSections()));
+  } catch {
+    // Not remembered; the choice still applies now.
+  }
+  if (state.town) showTown(state.town);
+});
 
 $("overlays").addEventListener("change", async (event) => {
   const input = event.target.closest("input[data-overlay]");
@@ -239,7 +297,7 @@ $("buildings").addEventListener("change", async (event) => {
   }
 });
 
-if (window.innerHeight < 820) $("group-overlays").open = false;
+if (window.innerHeight < 820) $("group-town").open = false;
 
 const simCities = new Segmented($("sim-cities"), {
   onChange: (city) => {
@@ -258,7 +316,7 @@ async function setSimulation(on) {
     // Make room for the city picker: fold the overlay list if the card would overflow.
     $("group-3d").open = true;
     const card = document.querySelector(".controls");
-    if (card.scrollHeight > card.clientHeight) $("group-overlays").open = false;
+    if (card.scrollHeight > card.clientHeight) $("group-town").open = false;
     $("sim-cities").scrollIntoView({ block: "nearest", behavior: "smooth" });
     $("buildings").checked = true;
     if (state.region) closeRegion();
@@ -471,7 +529,7 @@ async function start() {
       counties: state.meta?.counties ?? [],
       onHover: showHover,
       onInfo: showInfo,
-      onSelect: (name, position) => openRegion(name, { origin: position }),
+      onSelect: (name, position, town) => openRegion(name, { origin: position, town }),
     });
     document.querySelector(".credit").hidden = true;
     state.globe.setSky(document.body.dataset.sky);
@@ -492,8 +550,10 @@ async function start() {
     showError(error);
   }
 
+  // The township forecast is small and makes hovering townships informative.
+  townData.load("townships").catch(() => {});
   const initial = new URLSearchParams(location.search).get("region");
-  if (initial) openRegion(initial, { push: false });
+  if (initial) openRegion(initial, { push: false, town: townFromUrl(initial) });
 
   await (state.globe?.ready ?? Promise.resolve());
   $("loading").classList.add("done");

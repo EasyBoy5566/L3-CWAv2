@@ -67,7 +67,7 @@ def _heat() -> dict:
 
 def _uv(database) -> dict:
     # UV readings carry only a station id; the observation job keeps the station table.
-    rows = database.query("SELECT stationId, name, county, lat, lon FROM Stations")
+    rows = database.query("SELECT stationId, name, county, town, lat, lon FROM Stations")
     stations = {row["stationId"]: row for row in rows}
     return parse.parse_uv(fetch_dataset(config.UV_DATASET), stations)
 

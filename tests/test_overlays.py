@@ -60,10 +60,10 @@ def test_heat_index_now_and_peak(samples):
 
 
 def test_uv_is_placed_by_station_id(samples):
-    stations = {"467420": {"name": "永康", "county": "臺南市", "lat": 23.04, "lon": 120.24}}
+    stations = {"467420": {"name": "永康", "county": "臺南市", "town": "永康區", "lat": 23.04, "lon": 120.24}}
     result = parse.parse_uv(samples("O-A0005-001"), stations)
     assert result["date"] == "2026-09-23"
-    assert [s["id"] for s in result["stations"]] == ["467420"]  # unknown ids are skipped
+    assert [(s["id"], s["town"]) for s in result["stations"]] == [("467420", "永康區")]  # unknown ids are skipped
 
 
 def test_townships_pick_the_hour_at_hand(samples):

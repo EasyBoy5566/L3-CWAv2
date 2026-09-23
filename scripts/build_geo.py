@@ -1,10 +1,15 @@
-"""Build public/static/geo/taiwan-counties.json: python -m scripts.build_geo
+"""Build the boundary files the globe draws: python -m scripts.build_geo
 
-Source: taiwan-atlas counties-10t.json (MIT), a simplified TopoJSON of the
-Ministry of the Interior's 直轄市、縣市界線(TWD97經緯度), data.gov.tw dataset
-7442, published under the Open Government Data License v1.0. This decodes the
-TopoJSON to GeoJSON, keeps each county's name, and checks every name against
-the 22 CWA county names so the globe and the database agree.
+Source: taiwan-atlas (MIT), simplified TopoJSON of the Ministry of the
+Interior's boundary datasets on data.gov.tw, published under the Open
+Government Data License v1.0:
+
+- counties-10t.json  直轄市、縣市界線(TWD97經緯度), dataset 7442
+- towns-10t.json     鄉鎮市區界線(TWD97經緯度), dataset 7441
+
+Counties are decoded to GeoJSON. Townships stay TopoJSON, which shares each
+border between its two neighbours and is several times smaller; the browser
+decodes it. Every name is checked against CWA's so the map and the data agree.
 """
 
 import json
@@ -14,9 +19,11 @@ import requests
 from app import config
 from etl.counties import COUNTIES
 
-SOURCE = "https://cdn.jsdelivr.net/npm/taiwan-atlas@2021.9.20/counties-10t.json"
-TARGET = config.ROOT_DIR / "public" / "static" / "geo" / "taiwan-counties.json"
+ATLAS = "https://cdn.jsdelivr.net/npm/taiwan-atlas@2021.9.20"
+GEO = config.ROOT_DIR / "public" / "static" / "geo"
 DECIMALS = 4  # about 11 m, far below what the globe can show at county scale
+# The township names CWA uses, from a heat-index sample that lists all 368.
+CWA_TOWNS = config.ROOT_DIR / "tests" / "samples" / "M-A0085-001.json"
 
 
 def decode_arcs(topology: dict) -> list[list[list[float]]]:
@@ -43,8 +50,8 @@ def ring(indices: list[int], arcs: list) -> list:
     return points
 
 
-def main() -> None:
-    topology = requests.get(SOURCE, timeout=30).json()
+def counties() -> None:
+    topology = requests.get(f"{ATLAS}/counties-10t.json", timeout=30).json()
     arcs = decode_arcs(topology)
     features = []
     for geometry in topology["objects"]["counties"]["geometries"]:
@@ -63,12 +70,44 @@ def main() -> None:
     names = {feature["properties"]["name"] for feature in features}
     if names != set(COUNTIES):
         raise SystemExit(f"county names differ from CWA: {sorted(names ^ set(COUNTIES))}")
-    TARGET.parent.mkdir(parents=True, exist_ok=True)
-    TARGET.write_text(
+    target = GEO / "taiwan-counties.json"
+    target.write_text(
         json.dumps({"type": "FeatureCollection", "features": features}, ensure_ascii=False, separators=(",", ":")),
         encoding="utf-8",
     )
-    print(f"{len(features)} counties, {TARGET.stat().st_size // 1024} KB")
+    print(f"{len(features)} counties, {target.stat().st_size // 1024} KB")
+
+
+def towns() -> None:
+    topology = requests.get(f"{ATLAS}/towns-10t.json", timeout=30).json()
+    geometries = []
+    for geometry in topology["objects"]["towns"]["geometries"]:
+        properties = geometry["properties"]
+        geometries.append({
+            "type": geometry["type"],
+            "arcs": geometry["arcs"],
+            "properties": {"county": properties["COUNTYNAME"].replace("台", "臺"), "town": properties["TOWNNAME"]},
+        })
+    heat = json.loads(CWA_TOWNS.read_text(encoding="utf-8"))["records"]["Locations"]
+    cwa = {(c["CountyName"], t["TownName"]) for c in heat for t in c["Location"]}
+    ours = {(g["properties"]["county"], g["properties"]["town"]) for g in geometries}
+    if ours != cwa:
+        raise SystemExit(f"township names differ from CWA: {sorted(ours ^ cwa)[:10]}")
+    slim = {
+        "type": "Topology",
+        "transform": topology["transform"],
+        "arcs": topology["arcs"],
+        "objects": {"towns": {"type": "GeometryCollection", "geometries": geometries}},
+    }
+    target = GEO / "taiwan-towns.topo.json"
+    target.write_text(json.dumps(slim, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"{len(geometries)} townships, {target.stat().st_size // 1024} KB")
+
+
+def main() -> None:
+    GEO.mkdir(parents=True, exist_ok=True)
+    counties()
+    towns()
 
 
 if __name__ == "__main__":

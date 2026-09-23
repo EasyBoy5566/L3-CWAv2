@@ -1,86 +1,16 @@
-// Optional data layers on the globe, each one a Cesium data source built
-// from /api/overlays/<name> when its switch is turned on.
+// Map layers drawn on the globe, each one a Cesium data source built from
+// /api/overlays/<name> when its switch is turned on. Station and township
+// datasets are not drawn as points any more: they feed the township card
+// (town-data.js). The typhoon is the one dataset that belongs on the map.
 /* global Cesium */
 import { getJSON } from "./api.js";
-import { escapeHtml, hhmm, windText } from "./format.js";
-import { TEMPERATURE, colorAt } from "./scale.js";
-
-const RAIN = {
-  unit: " mm",
-  stops: [[0.5, "#a5f3fc"], [2, "#38bdf8"], [5, "#2563eb"], [10, "#22c55e"], [20, "#eab308"], [40, "#f97316"], [80, "#ef4444"], [150, "#c026d3"], [300, "#7e22ce"]],
-};
-const HEAT = { stops: [[20, "#4ade80"], [26, "#facc15"], [30, "#fb923c"], [34, "#ef4444"], [38, "#a21caf"]] };
-const UV = { stops: [[0, "#4ade80"], [3, "#facc15"], [6, "#fb923c"], [8, "#ef4444"], [11, "#a855f7"]] };
+import { escapeHtml, hhmm } from "./format.js";
 
 const color = (css, alpha = 1) => Cesium.Color.fromCssColorString(css).withAlpha(alpha);
-const stepColor = (scale, value) => {
-  let found = scale.stops[0][1];
-  for (const [limit, hex] of scale.stops) if (value >= limit) found = hex;
-  return found;
-};
 const num = (value, digits = 1, unit = "") => (value === null || value === undefined ? "—" : `${Number(value).toFixed(digits)}${unit}`);
-const clamp = { heightReference: Cesium.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: Number.POSITIVE_INFINITY };
-const place = (row) => Cesium.Cartesian3.fromDegrees(row.lon, row.lat);
 
 // Layer definitions: what each draws, and what its hover card says.
 const DEFINITIONS = {
-  rain: {
-    build(source, data) {
-      let wet = 0;
-      for (const s of data.stations) {
-        const r24 = s.r24h ?? 0;
-        if (r24 > 0) {
-          wet += 1;
-          // A column per wet gauge: height by the day's total, colour by intensity.
-          const length = Math.min(Math.max(r24 * 220, 900), 45000);
-          source.entities.add({
-            position: Cesium.Cartesian3.fromDegrees(s.lon, s.lat, length / 2),
-            cylinder: {
-              length,
-              topRadius: 700,
-              bottomRadius: 700,
-              material: color(stepColor(RAIN, r24), 0.85),
-              heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
-            },
-            properties: { overlay: "rain", row: s },
-          });
-        } else {
-          source.entities.add({
-            position: place(s),
-            point: { pixelSize: 2.5, color: color("#cbd5e1", 0.28), ...clamp },
-            properties: { overlay: "rain", row: s },
-          });
-        }
-      }
-      return `${wet} 站 24 小時內有雨`;
-    },
-    info: (s) => ({
-      title: s.name,
-      sub: `${s.county ?? ""}${s.town ?? ""} · ${hhmm(s.time)}`,
-      lines: [["10 分鐘", num(s.r10m, 1, " mm")], ["1 小時", num(s.r1h, 1, " mm")], ["3 小時", num(s.r3h, 1, " mm")], ["24 小時", num(s.r24h, 1, " mm")], ["3 天", num(s.r3d, 1, " mm")]],
-    }),
-    legend: { title: "24 小時雨量 mm", stops: RAIN.stops },
-  },
-
-  stations: {
-    build(source, data) {
-      for (const s of data.stations) {
-        source.entities.add({
-          position: place(s),
-          point: { pixelSize: 7, color: color(colorAt(TEMPERATURE, s.t)), outlineColor: color("#ffffff", 0.7), outlineWidth: 1, ...clamp },
-          properties: { overlay: "stations", row: s },
-        });
-      }
-      return `${data.stations.length} 站 · ${hhmm(data.time)} 觀測`;
-    },
-    info: (s) => ({
-      title: s.name,
-      sub: `${s.county ?? ""}${s.town ?? ""} · 海拔 ${num(s.alt, 0, " m")} · ${hhmm(s.time)}`,
-      lines: [["氣溫", num(s.t, 1, "°C")], ["今日高／低", `${num(s.hi, 1, "°")} / ${num(s.lo, 1, "°")}`], ["濕度", num(s.rh, 0, "%")], ["氣壓", num(s.p, 1, " hPa")],
-        ["風", `${num(s.ws, 1, " m/s")} ${windText(s.wd)}`], ["陣風", num(s.gust, 1, " m/s")], ["天氣", escapeHtml(s.wx ?? "—")]],
-    }),
-  },
-
   typhoon: {
     animated: true,
     build(source, data) {
@@ -90,73 +20,6 @@ const DEFINITIONS = {
     },
     info: (row) => row,
     fly: true,
-  },
-
-  heat: {
-    build(source, data) {
-      for (const t of data.towns) {
-        const hue = t.warning ? "#ef4444" : stepColor(HEAT, t.index ?? 0);
-        source.entities.add({
-          position: place(t),
-          point: { pixelSize: 8, color: color(hue, 0.9), outlineColor: color("#ffffff", 0.5), outlineWidth: 1, ...clamp },
-          properties: { overlay: "heat", row: t },
-        });
-      }
-      const warned = data.towns.filter((t) => t.warning).length;
-      return warned ? `${warned} 個鄉鎮有警示` : `${data.towns.length} 鄉鎮 · 無警示`;
-    },
-    info: (t) => ({
-      title: `${t.county ?? ""}${t.town ?? ""}`,
-      sub: `熱傷害指數 · ${hhmm(t.time)}`,
-      lines: [["指數", num(t.index, 0)], ["警示", escapeHtml(t.warning || "無")], ["24 小時內最高", t.peak === null ? "—" : `${num(t.peak, 0)}（${hhmm(t.peakTime)}）`]],
-    }),
-    legend: { title: "熱傷害指數", stops: HEAT.stops },
-  },
-
-  uv: {
-    build(source, data) {
-      for (const s of data.stations) {
-        source.entities.add({
-          position: place(s),
-          point: { pixelSize: 13, color: color(stepColor(UV, s.uv), 0.95), outlineColor: color("#ffffff", 0.8), outlineWidth: 1.5, ...clamp },
-          label: {
-            text: `UV ${Math.round(s.uv)}`, font: "600 12px 'Noto Sans TC', sans-serif", fillColor: Cesium.Color.WHITE,
-            outlineColor: color("#0b1220"), outlineWidth: 3, style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-            pixelOffset: new Cesium.Cartesian2(0, -16), ...clamp,
-            distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 900000),
-          },
-          properties: { overlay: "uv", row: s },
-        });
-      }
-      return `${data.stations.length} 站 · ${data.date ?? ""} 最大值`;
-    },
-    info: (s) => ({ title: s.name, sub: `${s.county ?? ""} · 當日最大值`, lines: [["紫外線指數", num(s.uv, 0)]] }),
-    legend: { title: "紫外線指數", stops: UV.stops },
-  },
-
-  townships: {
-    build(source, data) {
-      for (const t of data.towns) {
-        source.entities.add({
-          position: place(t),
-          point: { pixelSize: 6, color: color(colorAt(TEMPERATURE, t.t)), outlineColor: color("#0b1220", 0.6), outlineWidth: 1, ...clamp },
-          label: {
-            text: t.t === null ? "" : `${Math.round(t.t)}°`, font: "600 11px 'Noto Sans TC', sans-serif", fillColor: Cesium.Color.WHITE,
-            outlineColor: color("#0b1220"), outlineWidth: 3, style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-            pixelOffset: new Cesium.Cartesian2(0, -12), ...clamp,
-            // Labels only once the camera is close enough to read 368 of them.
-            distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 180000),
-          },
-          properties: { overlay: "townships", row: t },
-        });
-      }
-      return `${data.towns.length} 鄉鎮 · 逐時預報`;
-    },
-    info: (t) => ({
-      title: `${t.county ?? ""}${t.town ?? ""}`,
-      sub: "鄉鎮預報",
-      lines: [["氣溫", num(t.t, 0, "°C")], ["天氣", escapeHtml(t.wx ?? "—")], ["降雨機率", num(t.pop, 0, "%")]],
-    }),
   },
 };
 
@@ -387,11 +250,6 @@ export class Overlays {
     const properties = picked?.id?.properties;
     const name = properties?.overlay?.getValue?.();
     if (!name || !DEFINITIONS[name]) return null;
-    const row = properties.row.getValue();
-    return { ...DEFINITIONS[name].info(row), county: row.county ?? null };
-  }
-
-  legend(name) {
-    return DEFINITIONS[name]?.legend ?? null;
+    return DEFINITIONS[name].info(properties.row.getValue());
   }
 }

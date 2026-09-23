@@ -2,7 +2,7 @@
 // borders draped as imagery, and glass value bubbles.
 /* global Cesium */
 import { Bubbles } from "./bubbles.js";
-import { BOUNDS, bordersCanvas, countyAt, highlightCanvas, loadCounties } from "./geo.js";
+import { BOUNDS, bordersCanvas, countyAt, highlightCanvas, loadCounties, loadTowns, townAt, townBordersCanvas } from "./geo.js";
 import { Overlays } from "./overlays.js";
 
 // The camera aims south of the island's centre so Taiwan sits above the dock.
@@ -51,6 +51,8 @@ const OVERLAY_BRIGHTNESS = { day: 1, dusk: 1.4, night: 1.8 };
 const HIGHLIGHT_BRIGHTNESS = { day: 1.2, dusk: 2.2, night: 3.4 };
 // Above this camera height the coarse border raster is shown; below, the fine one.
 const BORDER_SWITCH = 300000;
+// Below this camera height townships are drawn, hovered and picked; above it, counties.
+const TOWN_LEVEL = 350000;
 
 function imagery(token) {
   if (token) return undefined; // Cesium ion default imagery
@@ -112,13 +114,19 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   // dashes from afar or blurs up close. Two rasters, swapped by camera height.
   const bordersFine = await canvasLayer(viewer, bordersCanvas(counties, 4096), BOUNDS);
   const bordersCoarse = await canvasLayer(viewer, bordersCanvas(counties, 1400, 0.8), BOUNDS);
-  const overlays = [bordersFine, bordersCoarse];
+  // Township lines go beneath the county lines (index 1: just above the imagery).
+  const towns = await loadTowns();
+  const townBorders = await canvasLayer(viewer, townBordersCanvas(towns), BOUNDS, 1);
+  const overlays = [bordersFine, bordersCoarse, townBorders];
+  let townsEnabled = true;
+  const townLevel = () => townsEnabled && viewer.camera.positionCartographic.height < TOWN_LEVEL;
   const pickBorders = () => {
     const far = viewer.camera.positionCartographic.height > BORDER_SWITCH;
     if (bordersCoarse.show !== far) {
       bordersCoarse.show = far;
       bordersFine.show = !far;
     }
+    townBorders.show = townLevel();
   };
   bordersFine.show = false;
   viewer.camera.changed.addEventListener(pickBorders);
@@ -129,9 +137,9 @@ export async function createGlobe(element, { token, counties: countyList, onHove
 
   const highlightLayer = (name) => {
     if (!highlights.has(name)) {
-      const county = counties.find((c) => c.name === name);
+      const feature = counties.find((c) => c.name === name) ?? towns.find((t) => t.name === name);
       highlights.set(name, (async () => {
-        const { canvas, bounds } = highlightCanvas(county);
+        const { canvas, bounds } = highlightCanvas(feature);
         const layer = await canvasLayer(viewer, canvas, bounds);
         layer.show = false;
         layer.brightness = HIGHLIGHT_BRIGHTNESS[sky];
@@ -183,7 +191,6 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   if (terrain) terrain.readyEvent.addEventListener(liftBubbles);
 
   const dataLayers = new Overlays(viewer);
-  const COUNTY_NAMES = new Set(countyList.map((c) => c.name));
 
   // ---------- picking by position, not by primitive ----------
   const lonLatAt = (position) => {
@@ -194,9 +201,12 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     const c = Cesium.Cartographic.fromCartesian(cartesian);
     return [Cesium.Math.toDegrees(c.longitude), Cesium.Math.toDegrees(c.latitude)];
   };
-  const nameAt = (position) => {
+  // The county under the pointer, and its township when the camera is close enough.
+  const placeAt = (position) => {
     const point = lonLatAt(position);
-    return point ? countyAt(counties, point[0], point[1]) : null;
+    const county = point ? countyAt(counties, point[0], point[1]) : null;
+    if (!county) return { county: null, town: null };
+    return { county, town: townLevel() ? townAt(towns, county, point[0], point[1]) : null };
   };
 
   const handler = new Cesium.ScreenSpaceEventHandler(scene.canvas);
@@ -214,17 +224,18 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       const info = dataLayers.infoFor(scene.pick(position));
       onInfo?.(info, { x: position.x, y: position.y });
       if (info) {
-        scene.canvas.style.cursor = info.county ? "pointer" : "";
+        scene.canvas.style.cursor = "";
         onHover?.(null);
         return;
       }
-      const name = nameAt(position);
-      if (name !== hovered) {
-        hovered = name;
-        scene.canvas.style.cursor = name ? "pointer" : "";
+      const { county, town } = placeAt(position);
+      const key = town?.name ?? county;
+      if (key !== hovered) {
+        hovered = key;
+        scene.canvas.style.cursor = county ? "pointer" : "";
         refreshHighlights();
       }
-      onHover?.(name, { x: position.x, y: position.y });
+      onHover?.(county, { x: position.x, y: position.y }, town);
     });
   }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
   // Cesium reports moves only over the canvas, so leaving it for the dock or
@@ -240,10 +251,9 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     onHover?.(null);
   });
   handler.setInputAction((click) => {
-    // A station or township opens its county; elsewhere, the county under the pointer.
-    const info = dataLayers.infoFor(scene.pick(click.position));
-    const name = info ? (COUNTY_NAMES.has(info.county) ? info.county : null) : nameAt(click.position);
-    if (name) onSelect?.(name, { x: click.position.x, y: click.position.y });
+    if (dataLayers.infoFor(scene.pick(click.position))) return; // the typhoon has no county
+    const { county, town } = placeAt(click.position);
+    if (county) onSelect?.(county, { x: click.position.x, y: click.position.y }, town);
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
   // ---------- camera ----------
@@ -342,8 +352,13 @@ export async function createGlobe(element, { token, counties: countyList, onHove
 
     setOverlay: (name, on) => dataLayers.set(name, on),
     refreshOverlays: () => dataLayers.refresh(),
-    overlayLegend: (name) => dataLayers.legend(name),
-    activeOverlays: () => [...dataLayers.active.keys()],
+
+    setTownBorders(on) {
+      townsEnabled = on;
+      pickBorders();
+      scene.requestRender();
+    },
+    town: (county, name) => towns.find((t) => t.county === county && t.town === name) ?? null,
 
     setBuildings,
 
@@ -364,9 +379,10 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       applyShadows();
     },
 
-    select(name) {
-      selected = name;
-      bubbles.select(name);
+    // A township glows on its own; a county alone glows as the county.
+    select(county, town = null) {
+      selected = town ? `${county}${town}` : county;
+      bubbles.select(county);
       refreshHighlights();
     },
 
@@ -377,10 +393,18 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       scene.requestRender();
     },
 
-    flyTo(name, { panelOpen = false } = {}) {
+    flyTo(name, options = {}) {
       const anchor = anchors.get(name);
-      if (!anchor) return;
-      const range = 190000;
+      if (anchor) this.flyToPoint(anchor.lon, anchor.lat, { range: 190000, ...options });
+    },
+
+    /** A township sits close in, low enough that its borders are drawn. */
+    flyToTown(town, options = {}) {
+      this.flyToPoint(town.center[0], town.center[1], { range: 60000, ...options });
+    },
+
+    flyToPoint(pointLon, pointLat, { panelOpen = false, range = 190000 } = {}) {
+      const anchor = { lon: pointLon, lat: pointLat };
       const heading = viewer.camera.heading;
       // With the panel covering the right side, aim at a point to the camera's
       // right of the county so it lands left of centre. Shifting the target

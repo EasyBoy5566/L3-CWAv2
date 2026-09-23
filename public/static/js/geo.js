@@ -114,3 +114,73 @@ export function highlightCanvas(county, maxSide = 1400) {
   context.stroke();
   return { canvas, bounds };
 }
+
+// ---------- townships ----------
+
+function bbox(polygons) {
+  let west = Infinity; let east = -Infinity; let south = Infinity; let north = -Infinity;
+  for (const polygon of polygons) {
+    for (const [lon, lat] of polygon[0]) {
+      west = Math.min(west, lon); east = Math.max(east, lon);
+      south = Math.min(south, lat); north = Math.max(north, lat);
+    }
+  }
+  return { west, east, south, north };
+}
+
+/** The 368 townships from TopoJSON: decode the shared arcs, rebuild each polygon. */
+export async function loadTowns(url = "/static/geo/taiwan-towns.topo.json") {
+  const topology = await (await fetch(url)).json();
+  const [sx, sy] = topology.transform.scale;
+  const [tx, ty] = topology.transform.translate;
+  const arcs = topology.arcs.map((arc) => {
+    let x = 0;
+    let y = 0;
+    return arc.map(([dx, dy]) => {
+      x += dx;
+      y += dy;
+      return [x * sx + tx, y * sy + ty];
+    });
+  });
+  const ring = (indices) => {
+    const points = [];
+    for (const index of indices) {
+      const arc = index >= 0 ? arcs[index] : [...arcs[~index]].reverse();
+      points.push(...(points.length ? arc.slice(1) : arc));
+    }
+    return points;
+  };
+  return topology.objects.towns.geometries.map((geometry) => {
+    const polygons = geometry.type === "Polygon" ? [geometry.arcs.map(ring)] : geometry.arcs.map((p) => p.map(ring));
+    const box = bbox(polygons);
+    const { county, town } = geometry.properties;
+    return {
+      name: `${county}${town}`,
+      county,
+      town,
+      polygons,
+      bbox: box,
+      center: [(box.west + box.east) / 2, (box.south + box.north) / 2],
+    };
+  });
+}
+
+/** The township containing a point, looking only within its county. */
+export function townAt(towns, county, lon, lat) {
+  const candidates = towns.filter((t) => t.county === county);
+  const name = countyAt(candidates, lon, lat);
+  return candidates.find((t) => t.name === name) ?? null;
+}
+
+/** Township borders: finer and fainter than the county lines drawn over them. */
+export function townBordersCanvas(towns, maxSide = 4096) {
+  const { canvas, context, project } = geoCanvas(BOUNDS, maxSide);
+  context.lineJoin = "round";
+  context.lineWidth = 1.3;
+  context.strokeStyle = "rgba(255, 255, 255, 0.42)";
+  for (const town of towns) {
+    tracePolygons(context, project, town.polygons);
+    context.stroke();
+  }
+  return canvas;
+}

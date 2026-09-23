@@ -138,6 +138,81 @@ function sunArc(sunrise, sunset, now) {
   </svg>`;
 }
 
+// ---------- township card ----------
+
+function townHead(town) {
+  return `<div class="town-head">
+      <div><h3>${escapeHtml(town.town)}</h3><span>${escapeHtml(town.county)} · 鄉鎮資料</span></div>
+      <button type="button" class="icon-btn town-close" aria-label="關閉鄉鎮資料">×</button>
+    </div>`;
+}
+
+function townBody(data, sections) {
+  const parts = [];
+  const failed = (section) => data[section]?.error;
+  const note = (text) => `<p class="note">${text}</p>`;
+
+  if (sections.includes("forecast")) {
+    const f = data.forecast?.row;
+    parts.push(failed("forecast") ? note(`鄉鎮預報載入失敗：${escapeHtml(data.forecast.error)}`) : f ? `
+      <div class="town-now">
+        <div class="town-temp">${deg(f.t)}</div>
+        <div class="town-wx">
+          <div>${weatherIcon(kindFromCode(f.wxCode), { size: 22, night: nightAt(taipeiNow(), new Map()) })}${escapeHtml(f.wx ?? "")}</div>
+          <small>降雨機率 ${f.pop === null ? "—" : `${Math.round(f.pop)}%`} · 鄉鎮逐時預報</small>
+        </div>
+      </div>` : note("暫無鄉鎮預報。"));
+  }
+
+  const chips = [];
+  if (sections.includes("heat")) {
+    const h = data.heat?.row;
+    if (h) {
+      const level = h.warning ? "alert" : h.index >= 30 ? "warn" : "";
+      const peak = h.peak === null ? "" : `，24 小時內最高 ${Math.round(h.peak)}（${hhmm(h.peakTime)}）`;
+      chips.push(`<span class="chip lens ${level}" title="熱傷害指數${peak}">熱傷害 <b>${h.index === null ? "—" : Math.round(h.index)}</b>${h.warning ? ` ${escapeHtml(h.warning)}` : ""}</span>`);
+    }
+  }
+  if (sections.includes("uv")) {
+    const u = data.uv?.row;
+    if (u) {
+      const where = data.uv.borrowed ? `（${escapeHtml(u.name)}站）` : "";
+      chips.push(`<span class="chip lens" title="${escapeHtml(data.uv.date ?? "")} 當日最大值">紫外線 <b>${Math.round(u.uv)}</b> ${uvLevel(u.uv)}${where}</span>`);
+    }
+  }
+  if (chips.length) parts.push(`<div class="town-chips">${chips.join("")}</div>`);
+
+  const stats = [];
+  if (sections.includes("rain")) {
+    const r = data.rain;
+    stats.push(failed("rain") ? `<div class="town-stat">${note("雨量載入失敗")}</div>` : r?.count ? `
+      <div class="town-stat">
+        <span class="label">${GLYPH.rain}雨量（${r.count} 站最大）</span>
+        <b>${num(r.r24h, 1, "")}<small> mm / 24 小時</small></b>
+        <small>1 小時 ${num(r.r1h, 1, " mm")} · 10 分鐘 ${num(r.r10m, 1, " mm")} · 3 天 ${num(r.r3d, 1, " mm")}</small>
+      </div>` : `<div class="town-stat"><span class="label">${GLYPH.rain}雨量</span><small>鄉鎮內沒有雨量站</small></div>`);
+  }
+  if (sections.includes("stations")) {
+    const st = data.stations;
+    stats.push(failed("stations") ? `<div class="town-stat">${note("觀測載入失敗")}</div>` : st?.list?.length ? `
+      <div class="town-stat">
+        <span class="label">${GLYPH.thermo}氣象站（${st.count} 站）</span>
+        <b>${st.tmin === st.tmax ? deg(st.tmin) : `${deg(st.tmin)}–${deg(st.tmax)}`}</b>
+        <small>濕度 ${num(st.rh, 0, "%")} · 最大陣風 ${num(st.gust, 1, " m/s")} · ${hhmm(st.time)}</small>
+      </div>` : `<div class="town-stat"><span class="label">${GLYPH.thermo}氣象站</span><small>鄉鎮內沒有氣象站</small></div>`);
+  }
+  if (stats.length) parts.push(`<div class="town-stats">${stats.join("")}</div>`);
+
+  const list = sections.includes("stations") ? data.stations?.list ?? [] : [];
+  if (list.length) {
+    parts.push(`<ul class="town-stations">${list.map((s) => `
+      <li><span>${escapeHtml(s.name)}</span><small>${s.alt === null ? "" : `${Math.round(s.alt)} m`}</small>
+        <em>${num(s.rh, 0, "%")}</em><b>${num(s.t, 1, "°")}</b></li>`).join("")}</ul>`);
+  }
+  if (!parts.length) parts.push(note("左側「鄉鎮資料卡」未勾選任何項目。"));
+  return parts.join("");
+}
+
 export class RegionView {
   constructor(container, name, { mode = "drawer" } = {}) {
     this.container = container;
@@ -156,6 +231,7 @@ export class RegionView {
     this.container.classList.add("wx");
     this.container.innerHTML = `
       ${page ? "" : `<div class="wx-compact" data-part="compact" aria-hidden="true"></div>`}
+      <section class="wx-card lens town-card" data-part="town" hidden></section>
       <header class="wx-hero" data-part="hero"><div class="skeleton"></div></header>
       ${card("hourly")}
       ${card("chart")}
@@ -384,6 +460,32 @@ export class RegionView {
       ? ` · <a href="/region?${new URLSearchParams({ name })}" target="_blank" rel="noopener">開啟完整頁面 ↗</a>` : "";
     const observed = current ? `${hhmm(current.observedAt)} 觀測（${current.stationCount} 站中位數）` : "無即時觀測";
     this.part("foot").innerHTML = `${observed} · 預報 ${hhmm(forecastFetchedAt)} 取得 · 資料：中央氣象署${link}`;
+  }
+
+  // ---------- township card ----------
+
+  /** Show one township's data above the county's hero. `town` comes from geo.loadTowns. */
+  async showTown(town, townData, sections, { onClose } = {}) {
+    const element = this.part("town");
+    this.town = town;
+    element.hidden = false;
+    element.innerHTML = `${townHead(town)}<div class="skeleton town-skeleton"></div>`;
+    this.container.scrollTo({ top: 0, behavior: "smooth" });
+    const data = await townData.forTown(town, sections);
+    if (this.town !== town || !element.isConnected) return; // another township was picked meanwhile
+    element.innerHTML = townHead(town) + townBody(data, sections);
+    element.querySelector(".town-close").addEventListener("click", () => {
+      this.hideTown();
+      onClose?.();
+    });
+  }
+
+  hideTown() {
+    this.town = null;
+    const element = this.part("town");
+    if (!element) return;
+    element.hidden = true;
+    element.innerHTML = "";
   }
 
   dispose() {

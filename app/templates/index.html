@@ -31,21 +31,36 @@
       </select>
     </label>
 
-    <details class="group" id="group-overlays" open>
-    <summary class="control-title">資料圖層<span class="count" id="overlay-count"></span></summary>
+    <details class="group" id="group-map" open>
+    <summary class="control-title">地圖圖層</summary>
     <div class="toggles" id="overlays">
-      {% for key, name, note in [
-        ("rain", "雨量站", "1,341 站 · 24 小時累積"),
-        ("stations", "氣象站觀測", "876 站 · 逐時"),
-        ("typhoon", "颱風路徑", "路徑與 70% 潛勢"),
-        ("heat", "熱傷害指數", "368 鄉鎮 · 逐 3 小時"),
-        ("uv", "紫外線", "測站當日最大值"),
-        ("townships", "鄉鎮預報", "368 鄉鎮 · 逐時"),
-      ] %}
-      <label class="toggle" data-overlay="{{ key }}">
-        <input type="checkbox" data-overlay="{{ key }}">
+      <label class="toggle">
+        <input type="checkbox" id="town-borders" checked>
         <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
-        <span class="toggle-text">{{ name }}<small data-note="{{ note }}">{{ note }}</small></span>
+        <span class="toggle-text">鄉鎮界線<small>拉近後顯示 · 點選查看鄉鎮</small></span>
+      </label>
+      <label class="toggle" data-overlay="typhoon">
+        <input type="checkbox" data-overlay="typhoon">
+        <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+        <span class="toggle-text">颱風路徑<small data-note="路徑與 70% 潛勢">路徑與 70% 潛勢</small></span>
+      </label>
+    </div>
+    </details>
+
+    <details class="group" id="group-town" open>
+    <summary class="control-title">鄉鎮資料卡<span class="count" id="section-count"></span></summary>
+    <div class="toggles" id="town-sections">
+      {% for key, name, note in [
+        ("forecast", "鄉鎮預報", "逐時氣溫、天氣、降雨機率"),
+        ("heat", "熱傷害指數", "目前與 24 小時內最高"),
+        ("rain", "雨量站", "鄉鎮內最大累積雨量"),
+        ("stations", "氣象站觀測", "溫度範圍、濕度、陣風"),
+        ("uv", "紫外線", "當日最大值"),
+      ] %}
+      <label class="toggle">
+        <input type="checkbox" data-section="{{ key }}" checked>
+        <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+        <span class="toggle-text">{{ name }}<small>{{ note }}</small></span>
       </label>
       {% endfor %}
     </div>

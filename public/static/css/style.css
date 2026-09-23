@@ -822,11 +822,6 @@ body.page-region { background: transparent; }
 .toggle input:checked + .switch-track .switch-thumb { transform: translateX(16px); }
 .toggle input:focus-visible + .switch-track { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.mini-legend { display: grid; gap: 3px; margin: -2px 8px 6px 56px; font-size: 10px; color: var(--faint); }
-.mini-legend i { display: block; height: 5px; border-radius: 3px; }
-.mini-legend .ticks { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
-.mini-legend .ticks b { font-weight: 500; }
-
 .sim-button {
   display: flex;
   align-items: center;
@@ -876,3 +871,45 @@ body.page-region { background: transparent; }
 .group .count { color: var(--accent); font-weight: 700; }
 .group[open] > :not(summary) { animation: unfold 0.3s var(--ease); }
 @keyframes unfold { from { opacity: 0; transform: translateY(-4px); } }
+
+/* ---------- township card, above the county hero ---------- */
+.town-card { margin-top: 18px; padding: 12px 14px 14px; gap: 12px; border-radius: 24px; animation: town-in 0.4s var(--ease); }
+@keyframes town-in { from { opacity: 0; transform: translateY(-6px) scale(0.98); } }
+.town-card .skeleton.town-skeleton { height: 96px; }
+.town-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding-right: 40px; }
+.town-head h3 { font-size: 22px; font-weight: 600; letter-spacing: 0.03em; }
+.town-head span { font-size: 12px; color: var(--muted); }
+.town-head .icon-btn { min-width: 30px; height: 30px; font-size: 18px; background: var(--inner); }
+.town-now { display: flex; align-items: center; gap: 16px; }
+.town-temp {
+  font-family: "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  font-size: 52px;
+  font-weight: 200;
+  line-height: 1;
+  background: linear-gradient(180deg, #ffffff 30%, rgba(206, 224, 255, 0.6));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: none;
+}
+.town-wx { display: grid; gap: 2px; }
+.town-wx > div { display: flex; align-items: center; gap: 6px; font-size: 16px; }
+.town-wx small { color: var(--muted); font-size: 12px; }
+.town-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.town-chips .chip { border: 0; gap: 4px; padding: 5px 12px; }
+.town-chips .chip b { font-size: 14px; }
+.town-chips .chip.warn { background: linear-gradient(135deg, rgba(251, 146, 60, 0.35), rgba(251, 146, 60, 0.12)); }
+.town-chips .chip.alert { background: linear-gradient(135deg, rgba(239, 68, 68, 0.45), rgba(239, 68, 68, 0.15)); }
+.town-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.town-stat { display: grid; gap: 2px; align-content: start; padding: 10px 12px; border-radius: 16px; background: rgba(255, 255, 255, 0.06); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12); }
+.town-stat .label { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); }
+.town-stat .label svg { width: 13px; height: 13px; }
+.town-stat b { font-size: 22px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.town-stat b small { font-size: 11px; color: var(--muted); }
+.town-stat > small { font-size: 11.5px; line-height: 1.4; color: rgba(255, 255, 255, 0.72); }
+.town-stations { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; font-size: 13px; font-variant-numeric: tabular-nums; }
+.town-stations li { display: grid; grid-template-columns: 1fr auto auto 52px; align-items: baseline; gap: 10px; padding: 5px 8px; border-radius: 10px; }
+.town-stations li:nth-child(odd) { background: rgba(255, 255, 255, 0.04); }
+.town-stations small { color: var(--faint); font-size: 11px; }
+.town-stations em { color: var(--muted); font-style: normal; font-size: 12px; }
+.town-stations b { text-align: right; font-weight: 600; }

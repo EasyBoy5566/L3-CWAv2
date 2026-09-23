@@ -219,7 +219,7 @@ def parse_uv(raw_json: dict, stations: dict[str, dict]) -> dict:
         value = number(reading.get("UVIndex"), 0, 20) if isinstance(reading, dict) else None
         if station and value is not None:
             rows.append({"id": identifier, "name": station["name"], "county": station["county"],
-                         "lat": station["lat"], "lon": station["lon"], "uv": value})
+                         "town": station.get("town"), "lat": station["lat"], "lon": station["lon"], "uv": value})
     return {"date": text(element.get("Date")), "stations": rows}
 
 
