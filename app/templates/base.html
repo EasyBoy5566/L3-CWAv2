@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}臺灣 3D 氣象{% endblock %}</title>
+  <meta name="description" content="以 3D 地形呈現臺灣各縣市即時觀測、逐時與一週預報、日出日落與月相。資料來源：中央氣象署開放資料。">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='14' fill='%23fbbf24'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}" data-cesium-token="{{ cesium_token }}" data-region="{{ region or '' }}">
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brand-sun" aria-hidden="true"></span>臺灣 3D 氣象</a>
+    <div class="sky" id="sky" aria-live="polite"></div>
+    <div class="freshness" id="freshness" role="status" aria-live="polite"></div>
+  </header>
+  {% block content %}{% endblock %}
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
