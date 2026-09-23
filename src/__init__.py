@@ -1,2 +1,0 @@
-"""Taiwan weather forecast dashboard."""
-
