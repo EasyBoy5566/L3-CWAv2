@@ -2,6 +2,7 @@
 // The globe's side panel and the standalone /region?name=<縣市> page both use it.
 import { getJSON, regionUrl } from "./api.js";
 import { ChartSet, historyDayOption, hourlyOption, humidityPressureOption, revisionsOption, trendOption } from "./charts.js";
+import { Segmented, refract } from "./glass.js";
 import { dayLabel, escapeHtml, hhmm, moonPhase, moonSvg, num, todayInTaipei, windText, wxIcon } from "./format.js";
 import { TEMPERATURE, colorAt } from "./scale.js";
 
@@ -19,15 +20,25 @@ export class RegionView {
   }
 
   async load() {
-    const wide = this.mode === "page" ? "wide" : "";
-    this.container.innerHTML = `
-      <section class="rg-head ${wide}" data-part="head"></section>
-      <section class="${wide}" data-part="now"><div class="skeleton"></div></section>
-      <section class="${wide}" data-part="hourly"></section>
-      <section data-part="week"></section>
-      <section data-part="astro"></section>
-      <section class="${wide}" data-part="trend"></section>
-      <section class="${wide}" data-part="history"></section>`;
+    // On the standalone page every section is its own pane of glass; inside
+    // the globe's panel (already glass) they are light cards.
+    const page = this.mode === "page";
+    const section = (part, { wide = false, card = true } = {}) => {
+      const classes = [page ? "glass" : card ? "card" : "", page && wide ? "wide" : "", part === "head" ? "rg-head" : ""];
+      return `<section class="${classes.join(" ").trim()}" data-part="${part}"${page ? ' data-refract="36"' : ""}></section>`;
+    };
+    this.container.innerHTML = [
+      section("head", { wide: true, card: false }),
+      section("now", { wide: true }),
+      section("hourly", { wide: true }),
+      section("week"),
+      section("astro"),
+      section("trend", { wide: true }),
+      section("history", { wide: true }),
+    ].join("");
+    this.part("now").innerHTML = `<div class="skeleton"></div>`;
+    refract(this.container);
+    this.initTrend();
     await this.refresh();
     this.loadTrend();
     this.loadHistory();
@@ -155,21 +166,27 @@ export class RegionView {
       </div>`;
   }
 
-  async loadTrend() {
+  initTrend() {
     const element = this.part("trend");
-    const tabs = [1, 7, 30].map((d) => `<button type="button" data-days="${d}" aria-pressed="${d === this.trendDays}">${d} 天</button>`).join("");
+    const tabs = [1, 7, 30].map((d) => `<button type="button" data-value="${d}" aria-pressed="${d === this.trendDays}">${d} 天</button>`).join("");
     element.innerHTML = `
-      <h3>趨勢 <span class="tabs">${tabs}</span></h3>
-      <div class="chart" data-chart="trend"></div>
-      <div class="chart small" data-chart="hp"></div>
+      <h3>趨勢 <span class="tabs" role="group" aria-label="趨勢期間">${tabs}</span></h3>
+      <div class="trend-body"></div>
       <p class="note">實測為縣市內平地測站中位數（每小時一點）；三角形為當日最後一版預報的最高／最低。</p>`;
-    element.querySelector(".tabs").addEventListener("click", (event) => {
-      const days = Number(event.target.dataset.days);
-      if (days && days !== this.trendDays) {
-        this.trendDays = days;
+    new Segmented(element.querySelector(".tabs"), {
+      attribute: "aria-pressed",
+      onChange: (value) => {
+        this.trendDays = Number(value);
         this.loadTrend();
-      }
+      },
     });
+  }
+
+  async loadTrend() {
+    const element = this.part("trend").querySelector(".trend-body");
+    element.innerHTML = `
+      <div class="chart" data-chart="trend"></div>
+      <div class="chart small" data-chart="hp"></div>`;
     try {
       const trend = await getJSON(regionUrl(this.name, "/trend", { days: this.trendDays }), { signal: this.aborter.signal });
       if (!trend.observed.length) {

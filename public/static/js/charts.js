@@ -94,7 +94,7 @@ export function trendOption(trend) {
     xAxis: timeAxis(),
     yAxis: valueAxis("°C"),
     series: [
-      { name: "實測", type: "line", smooth: true, showSymbol: false, data: pair(trend.observed, "observedAt", "temperature"), itemStyle: { color: COLORS.temp } },
+      { name: "實測", type: "line", smooth: true, showSymbol: trend.observed.length < 24, data: pair(trend.observed, "observedAt", "temperature"), itemStyle: { color: COLORS.temp } },
       { name: "預報最高", type: "scatter", symbol: "triangle", symbolSize: 9, data: trend.forecasts.filter((f) => f.maxt !== null).map((f) => [noon(f.dataDate), f.maxt]), itemStyle: { color: COLORS.high } },
       { name: "預報最低", type: "scatter", symbol: "triangle", symbolRotate: 180, symbolSize: 9, data: trend.forecasts.filter((f) => f.mint !== null).map((f) => [noon(f.dataDate), f.mint]), itemStyle: { color: COLORS.low } },
     ],
@@ -106,8 +106,8 @@ export function humidityPressureOption(trend) {
     xAxis: timeAxis(),
     yAxis: [valueAxis("濕度 %", { min: 0, max: 100, scale: false }), valueAxis("hPa", { splitLine: { show: false } })],
     series: [
-      { name: "相對濕度", type: "line", smooth: true, showSymbol: false, data: pair(trend.observed, "observedAt", "humidity"), itemStyle: { color: COLORS.humidity } },
-      { name: "氣壓", type: "line", yAxisIndex: 1, smooth: true, showSymbol: false, data: pair(trend.observed, "observedAt", "pressure"), itemStyle: { color: COLORS.pressure } },
+      { name: "相對濕度", type: "line", smooth: true, showSymbol: trend.observed.length < 24, data: pair(trend.observed, "observedAt", "humidity"), itemStyle: { color: COLORS.humidity } },
+      { name: "氣壓", type: "line", yAxisIndex: 1, smooth: true, showSymbol: trend.observed.length < 24, data: pair(trend.observed, "observedAt", "pressure"), itemStyle: { color: COLORS.pressure } },
     ],
   });
 }
@@ -125,7 +125,7 @@ export function historyDayOption(history) {
     xAxis: timeAxis(),
     yAxis: valueAxis("°C"),
     series: [{
-      name: "實測溫度", type: "line", smooth: true, showSymbol: false,
+      name: "實測溫度", type: "line", smooth: true, showSymbol: history.observed.length < 24,
       data: pair(history.observed, "observedAt", "temperature"), itemStyle: { color: COLORS.temp },
       markLine: { symbol: "none", silent: true, data: guides },
     }],

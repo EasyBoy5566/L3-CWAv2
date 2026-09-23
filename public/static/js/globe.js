@@ -71,6 +71,7 @@ export async function createGlobe(element, { token, counties, onHover, onSelect 
   scene.sun.show = true;
   viewer.shadowMap.softShadows = true;
   viewer.shadowMap.size = 2048;
+  viewer.creditDisplay.addStaticCredit(new Cesium.Credit("資料：中央氣象署開放資料 · 縣市界：內政部國土測繪中心", true));
   viewer.clock.currentTime = Cesium.JulianDate.now();
   viewer.clock.clockStep = Cesium.ClockStep.SYSTEM_CLOCK;
 
@@ -153,7 +154,8 @@ export async function createGlobe(element, { token, counties, onHover, onSelect 
   }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
   handler.setInputAction((click) => {
     const name = nameAt(click.position);
-    if (name) onSelect?.(name);
+    // The canvas fills the viewport, so canvas coordinates are page coordinates.
+    if (name) onSelect?.(name, { x: click.position.x, y: click.position.y });
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
   const flyHome = (duration = 1.5) => {
@@ -233,7 +235,8 @@ export async function createGlobe(element, { token, counties, onHover, onSelect 
         viewer.clock.shouldAnimate = false;
         viewer.clock.currentTime = Cesium.JulianDate.fromDate(date);
       } else {
-        viewer.clock.currentTime = Cesium.JulianDate.now();
+        viewer.creditDisplay.addStaticCredit(new Cesium.Credit("資料：中央氣象署開放資料 · 縣市界：內政部國土測繪中心", true));
+  viewer.clock.currentTime = Cesium.JulianDate.now();
         viewer.clock.shouldAnimate = true;
       }
       scene.requestRender();

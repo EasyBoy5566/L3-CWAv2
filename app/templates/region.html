@@ -2,8 +2,9 @@
 {% block title %}{{ region }} 天氣 · 臺灣 3D 氣象{% endblock %}
 {% block body_class %}page-region{% endblock %}
 {% block content %}
+<div class="backdrop" aria-hidden="true"><i></i><i></i><i></i></div>
 <main class="region-page">
-  <nav class="crumbs"><a href="/?region={{ region | urlencode }}">← 回到 3D 地圖</a></nav>
+  <nav class="crumbs"><a class="chip glass" href="/?region={{ region | urlencode }}">‹ 回到 3D 地圖</a></nav>
   <div id="region-root" class="panel-body page"></div>
   <footer class="credit static">資料：中央氣象署開放資料</footer>
 </main>
