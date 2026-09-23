@@ -233,3 +233,4 @@ data/*.db-*
 htmlcov/
 .coverage
 
+.vercel/
