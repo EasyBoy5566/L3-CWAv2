@@ -12,6 +12,7 @@
 <body class="{% block body_class %}{% endblock %}" data-sky="night" data-cesium-token="{{ cesium_token }}" data-region="{{ region or '' }}">
   <header class="topbar glass" data-refract="40">
     <a class="brand" href="/"><span class="brand-sun" aria-hidden="true"></span>臺灣 3D 氣象</a>
+    {% block topbar_tools %}{% endblock %}
     <div class="freshness" id="freshness" role="status" aria-live="polite"></div>
   </header>
   {% block content %}{% endblock %}

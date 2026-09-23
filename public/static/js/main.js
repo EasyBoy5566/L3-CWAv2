@@ -38,6 +38,7 @@ const state = {
   town: null, // the township whose card is open
   playTimer: null,
   simCity: "taipei",
+  simulating: false,
 };
 
 // ---------- data ----------
@@ -122,7 +123,6 @@ function showTown(town) {
   state.view?.showTown(town, townData, ALL_SECTIONS);
 }
 
-// A township click keeps the camera where it is: the user is already close.
 function openRegion(name, { push = true, fly = true, origin = null, town = null } = {}) {
   if (!name) return closeRegion({ push });
   if (state.region !== name) {
@@ -134,9 +134,10 @@ function openRegion(name, { push = true, fly = true, origin = null, town = null 
   revealPanel(origin);
   setCounty(name);
   showTown(town);
-  // A click on the map is already close; a township from a link or history flies in.
+  // A county flies in; a township is brought to the centre of the visible map,
+  // keeping the height when it was clicked there.
   if (fly && !town) state.globe?.flyTo(name, { panelOpen: true });
-  else if (fly && town && !origin) state.globe?.flyToTown(town, { panelOpen: true });
+  else if (fly && town) state.globe?.flyToTown(town, { panelOpen: true, keepHeight: Boolean(origin) });
   if (push) history.pushState({}, "", regionUrl(name, town));
   document.title = `${town ? town.town + " · " : ""}${name} · 臺灣 3D 氣象`;
 }
@@ -229,6 +230,24 @@ function setOverlayStatus(name, text, { error = false, busy = false } = {}) {
   row.classList.toggle("busy", busy);
 }
 
+$("overlays").addEventListener("change", async (event) => {
+  const input = event.target.closest("input[data-overlay]");
+  if (!input || !state.globe) return;
+  const name = input.dataset.overlay;
+  if (!input.checked) {
+    await state.globe.setOverlay(name, false);
+    setOverlayStatus(name, "");
+    return;
+  }
+  setOverlayStatus(name, "載入中…", { busy: true });
+  try {
+    const status = await state.globe.setOverlay(name, true);
+    if (input.checked) setOverlayStatus(name, status);
+  } catch (error) {
+    input.checked = false;
+    setOverlayStatus(name, error.message, { error: true });
+  }
+});
 
 // ---------- 3D: buildings and the shadow simulation ----------
 $("buildings").addEventListener("change", async (event) => {
@@ -242,41 +261,42 @@ $("buildings").addEventListener("change", async (event) => {
 });
 
 
-const simCities = new Segmented($("sim-cities"), {
+// North, central and south: each preset turns the buildings on and flies to a skyline.
+new Segmented($("sim-cities"), {
   onChange: (city) => {
     state.simCity = city;
-    state.globe?.startShadowSimulation(city);
+    showCity(city).catch(showError);
   },
 });
+$("sim-cities").addEventListener("click", (event) => {
+  // Picking the preset already chosen flies there again.
+  const button = event.target.closest("button");
+  if (button?.getAttribute("aria-checked") === "true") showCity(button.dataset.value).catch(showError);
+});
 
-async function setSimulation(on) {
-  const button = $("shadow-sim");
-  button.setAttribute("aria-pressed", String(on));
-  button.querySelector(".sim-label").textContent = on ? "結束陰影模擬" : "建築陰影模擬";
-  $("sim-cities").hidden = !on;
-  if (on) {
-    simCities.place(false);
-    $("group-3d").open = true;
-    $("sim-cities").scrollIntoView({ block: "nearest", behavior: "smooth" });
-    $("buildings").checked = true;
-    if (state.region) closeRegion();
-    await state.globe.startShadowSimulation(state.simCity);
-    // Start in the morning, when shadows are long, and play the day.
-    setClock(7 * 60);
-    setPlaying(true);
-  } else {
-    setPlaying(false);
-    state.globe.stopShadowSimulation();
-  }
+async function showCity(city) {
+  if (!state.globe?.hasTerrain) return;
+  $("buildings").checked = true;
+  if (state.region) closeRegion();
+  await state.globe.showCity(city);
 }
 
-$("shadow-sim").addEventListener("click", () => {
-  if (!state.globe?.hasTerrain) {
-    $("buildings-note").textContent = "陰影模擬需要 Cesium ion token。";
-    return;
-  }
-  setSimulation($("shadow-sim").getAttribute("aria-pressed") !== "true").catch(showError);
-});
+// Play starts the shadow simulation over the chosen skyline, from the long
+// morning shadows; later presses pause and resume without moving the camera.
+async function startSimulation() {
+  if (!state.globe?.hasTerrain || state.simulating) return;
+  state.simulating = true;
+  $("buildings").checked = true;
+  if (state.region) closeRegion();
+  await state.globe.startShadowSimulation(state.simCity);
+  setClock(7 * 60);
+}
+
+function stopSimulation() {
+  if (!state.simulating) return;
+  state.simulating = false;
+  state.globe?.stopShadowSimulation();
+}
 
 // ---------- fallback when WebGL or Cesium is unavailable ----------
 function renderFallbackTiles() {
@@ -364,7 +384,11 @@ function setPlaying(on) {
   }, 90);
 }
 
-$("clock-play").addEventListener("click", () => setPlaying($("clock-play").getAttribute("aria-pressed") !== "true"));
+$("clock-play").addEventListener("click", async () => {
+  const on = $("clock-play").getAttribute("aria-pressed") !== "true";
+  if (on) await startSimulation().catch(showError);
+  setPlaying(on);
+});
 
 function sliderToDate(minutes) {
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
@@ -398,6 +422,7 @@ $("clock").addEventListener("input", (event) => {
 });
 $("clock-now").addEventListener("click", () => {
   setPlaying(false);
+  stopSimulation();
   syncSliderToNow();
   state.globe?.setTime(null);
 });
@@ -475,12 +500,13 @@ async function start() {
     if (!state.globe.hasTerrain) {
       $("buildings").disabled = true;
       $("buildings-note").textContent = "需要 Cesium ion token";
+      for (const button of $("sim-cities").querySelectorAll("button")) button.disabled = true;
     }
   } catch (error) {
     console.error(error);
     $("globe").hidden = true;
     $("fallback").hidden = false;
-    document.querySelector(".clock").hidden = true;
+    document.querySelector(".topbar .tools").hidden = true;
   }
 
   try {

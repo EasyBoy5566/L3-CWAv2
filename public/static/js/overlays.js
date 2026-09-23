@@ -20,6 +20,8 @@ const DEFINITIONS = {
     },
     info: (row) => row,
     fly: true,
+    // Every track and forecast point, framed together with Taiwan.
+    points: (data) => data.cyclones.flatMap((c) => [...c.track, ...c.forecast]).map((p) => [p.lon, p.lat]),
   },
 };
 
@@ -219,11 +221,22 @@ export class Overlays {
     if (previous) this.viewer.dataSources.remove(previous.source, true);
     this.active.set(name, { source, status });
     this.updateAnimation();
-    if (definition.fly && !previous && source.entities.values.length) {
-      this.viewer.flyTo(source, { duration: 1.8, offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-60), 0) });
-    }
+    if (definition.fly && !previous) this.frame(definition.points?.(data) ?? []);
     this.viewer.scene.requestRender();
     return status;
+  }
+
+  // Fly out so the points and Taiwan share the view. Framing is done here from
+  // plain points: viewer.flyTo(dataSource) waits on every entity's bounds,
+  // which never settle for the spinning cloud disc.
+  frame(points) {
+    if (!points.length) return;
+    const all = [...points, [120.0, 21.9], [122.0, 25.3]]; // Taiwan's corners
+    const sphere = Cesium.BoundingSphere.fromPoints(all.map(([lon, lat]) => Cesium.Cartesian3.fromDegrees(lon, lat)));
+    this.viewer.camera.flyToBoundingSphere(sphere, {
+      duration: 1.8,
+      offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-70), Math.max(sphere.radius * 2.6, 900000)),
+    });
   }
 
   /** Re-fetch every active layer, keeping each on screen until its replacement is ready. */

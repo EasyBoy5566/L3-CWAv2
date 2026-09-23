@@ -10,11 +10,13 @@ import { escapeHtml } from "./format.js";
 import { colorAt } from "./scale.js";
 
 // Municipalities first, then north to south; the selected county always wins.
-const PRIORITY = ["臺北市", "新北市", "桃園市", "臺中市", "臺南市", "高雄市", "基隆市", "新竹市", "新竹縣", "苗栗縣", "彰化縣", "南投縣", "雲林縣", "嘉義市", "嘉義縣", "屏東縣", "宜蘭縣", "花蓮縣", "臺東縣", "澎湖縣", "金門縣", "連江縣"];
+// Yilan, Hualien and Taitung sit alone on the east coast; they come early so
+// the crowded north does not crowd them out.
+const PRIORITY = ["臺北市", "新北市", "宜蘭縣", "桃園市", "臺中市", "臺南市", "高雄市", "花蓮縣", "臺東縣", "基隆市", "新竹市", "新竹縣", "苗栗縣", "彰化縣", "南投縣", "雲林縣", "嘉義市", "嘉義縣", "屏東縣", "澎湖縣", "金門縣", "連江縣"];
 const FAR = 260000; // camera height in metres above which names are shortened
 const GAP = 4;
 // Floating chrome that bubbles must not slide underneath.
-const OBSTACLES = ".topbar, .controls, .dock, .panel:not([hidden])";
+const OBSTACLES = ".topbar, .controls, .panel:not([hidden])";
 
 function shortNames(names) {
   const stems = names.map((name) => name.replace(/[市縣]$/, ""));

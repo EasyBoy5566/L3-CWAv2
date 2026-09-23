@@ -330,7 +330,7 @@ export class GlassSelect {
     openSelect?.close();
     openSelect = this;
     this.sync();
-    // Open upward when there is not enough room below (the dock sits at the bottom).
+    // Open upward when there is not enough room below.
     const rect = this.trigger.getBoundingClientRect();
     const up = window.innerHeight - rect.bottom < 280 && rect.top > window.innerHeight / 2;
     this.menu.classList.toggle("up", up);

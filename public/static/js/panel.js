@@ -144,6 +144,18 @@ function townHead(town) {
   return `<div class="town-head"><h3>${escapeHtml(town.town)}</h3><span>${escapeHtml(town.county)} · 鄉鎮</span></div>`;
 }
 
+// Where each gauge's marker sits: heat-injury index 24–38, UV 0–12.
+const HEAT_RANGE = [24, 38];
+const UV_TOP = 12;
+
+function meter({ kind, label, value, level, at, tip }) {
+  const place = value === null || value === undefined ? null : Math.min(Math.max(at, 0), 1);
+  return `<div class="meter ${kind}" title="${escapeHtml(tip)}">
+      <div class="meter-top"><span>${label}</span><b>${place === null ? "—" : Math.round(value)}</b><em>${escapeHtml(level)}</em></div>
+      <div class="meter-bar">${place === null ? "" : `<i style="left:${(place * 100).toFixed(1)}%"></i>`}</div>
+    </div>`;
+}
+
 const RAIN_PERIODS = [["r10m", "10 分鐘"], ["r1h", "1 小時"], ["r3h", "3 小時"], ["r24h", "24 小時"], ["r3d", "3 天"]];
 
 function townBody(data) {
@@ -152,17 +164,16 @@ function townBody(data) {
 
   // Now: the township's forecast, with heat and UV beside it.
   const f = data.forecast?.row;
-  const chips = [];
+  const meters = [];
   const h = data.heat?.row;
   if (h) {
-    const level = h.warning ? "alert" : h.index >= 30 ? "warn" : "";
-    const peak = h.peak === null ? "" : `24 小時內最高 ${Math.round(h.peak)}（${hhmm(h.peakTime)}）`;
-    chips.push(`<span class="chip lens ${level}" title="${peak}"><small>熱傷害</small><b>${h.index === null ? "—" : Math.round(h.index)}</b>${h.warning ? `<small>${escapeHtml(h.warning)}</small>` : ""}</span>`);
+    const peak = h.peak === null ? "" : `24 小時內最高 ${Math.round(h.peak)}（${hhmm(h.peakTime)}）${h.peakWarning ? ` ${h.peakWarning}` : ""}`;
+    meters.push(meter({ kind: "heat", label: "熱傷害", value: h.index, level: h.warning ?? "無警示", at: (h.index - HEAT_RANGE[0]) / (HEAT_RANGE[1] - HEAT_RANGE[0]), tip: peak }));
   }
   const u = data.uv?.row;
   if (u) {
     const where = data.uv.borrowed ? `，取自${u.name}站` : "";
-    chips.push(`<span class="chip lens" title="${escapeHtml(data.uv.date ?? "")} 當日最大值${escapeHtml(where)}"><small>紫外線</small><b>${Math.round(u.uv)}</b><small>${uvLevel(u.uv)}</small></span>`);
+    meters.push(meter({ kind: "uv", label: "紫外線", value: u.uv, level: uvLevel(u.uv), at: u.uv / UV_TOP, tip: `${data.uv.date ?? ""} 當日最大值${where}` }));
   }
   parts.push(`
     <div class="town-now">
@@ -171,7 +182,7 @@ function townBody(data) {
         ${f ? `<div>${weatherIcon(kindFromCode(f.wxCode), { size: 22, night: nightAt(taipeiNow(), new Map()) })}${escapeHtml(f.wx ?? "")}</div>
         <small>降雨機率 ${f.pop === null ? "—" : `${Math.round(f.pop)}%`}</small>` : "<small>暫無鄉鎮預報</small>"}
       </div>
-      <div class="town-chips">${chips.join("")}</div>
+      <div class="town-meters">${meters.join("")}</div>
     </div>`);
 
   // Rain: the township's wettest gauge per period, as a row of figures.
@@ -189,9 +200,10 @@ function townBody(data) {
       <div class="town-block-head">${GLYPH.thermo}<span>氣象站</span><small>${st?.list?.length ? `${st.count} 站 · ${hhmm(st.time)} 觀測` : ""}</small></div>
       ${data.stations?.error ? note("觀測資料載入失敗") : st?.list?.length ? `
       <table class="town-table">
+        <colgroup><col><col class="c-alt"><col class="c-t"><col class="c-rh"><col class="c-gust"></colgroup>
         <thead><tr><th>測站</th><th>海拔</th><th>氣溫</th><th>濕度</th><th>陣風</th></tr></thead>
         <tbody>${st.list.map((s) => `<tr>
-          <td>${escapeHtml(s.name)}</td>
+          <td title="${escapeHtml(s.name)}">${escapeHtml(s.name)}</td>
           <td>${s.alt === null ? "—" : `${Math.round(s.alt)} m`}</td>
           <td class="t">${num(s.t, 1, "°")}</td>
           <td>${num(s.rh, 0, "%")}</td>
@@ -220,7 +232,7 @@ export class RegionView {
     this.container.classList.add("wx");
     this.container.innerHTML = `
       ${page ? "" : `<div class="wx-compact" data-part="compact" aria-hidden="true"></div>`}
-      <section class="wx-card lens town-card" data-part="town" hidden></section>
+      <section class="town" data-part="town" hidden></section>
       <header class="wx-hero" data-part="hero"><div class="skeleton"></div></header>
       ${card("hourly")}
       ${card("chart")}
@@ -458,11 +470,11 @@ export class RegionView {
     const element = this.part("town");
     this.town = town;
     element.hidden = false;
-    element.innerHTML = `${townHead(town)}<div class="skeleton town-skeleton"></div>`;
+    element.innerHTML = `${townHead(town)}<div class="wx-card lens town-card"><div class="skeleton town-skeleton"></div></div>`;
     this.container.scrollTo({ top: 0, behavior: "smooth" });
     const data = await townData.forTown(town, sections);
     if (this.town !== town || !element.isConnected) return; // another township was picked meanwhile
-    element.innerHTML = townHead(town) + townBody(data);
+    element.innerHTML = `${townHead(town)}<div class="wx-card lens town-card">${townBody(data)}</div>`;
   }
 
   hideTown() {

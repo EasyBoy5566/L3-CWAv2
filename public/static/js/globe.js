@@ -5,11 +5,12 @@ import { Bubbles } from "./bubbles.js";
 import { BOUNDS, bordersCanvas, countyAt, highlightCanvas, loadCounties, loadTowns, townAt, townBordersCanvas } from "./geo.js";
 import { Overlays } from "./overlays.js";
 
-// The camera aims south of the island's centre so Taiwan sits above the dock.
-const HOME = { lon: 120.95, lat: 23.15, heading: -12, pitch: -42, range: 600000 };
+// The camera aims a little south of the island's centre: the tilted view
+// pushes the far north up towards the top bar.
+const HOME = { lon: 120.95, lat: 23.35, heading: -12, pitch: -42, range: 600000 };
 // What the 2D map frames: the main island with Penghu, Kinmen and Matsu, and
-// extra sea to the south so the dock does not cover the southern tip.
-const TAIWAN_2D = [117.9, 21.0, 122.6, 26.5];
+// a margin of sea on every side.
+const TAIWAN_2D = [117.9, 21.4, 122.6, 26.6];
 const EXAGGERATION = 2.5;
 // Terrain is exaggerated from afar so the Central Range reads, and eases back
 // to true scale near the ground so buildings and streets sit right.
@@ -29,8 +30,9 @@ export const SHADOW_CITIES = {
 const LABEL_POINTS = {
   基隆市: [25.13, 121.74],
   臺北市: [25.09, 121.56],
-  新北市: [24.86, 121.72],
+  新北市: [24.93, 121.50],
   桃園市: [24.86, 121.24],
+  宜蘭縣: [24.62, 121.69],
   新竹市: [24.80, 120.94],
   新竹縣: [24.66, 121.18],
   苗栗縣: [24.49, 120.93],
@@ -236,7 +238,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       onHover?.(county, { x: position.x, y: position.y }, town);
     });
   }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
-  // Cesium reports moves only over the canvas, so leaving it for the dock or
+  // Cesium reports moves only over the canvas, so leaving it for the top bar or
   // a panel would otherwise strand the hover card and highlight in place.
   scene.canvas.addEventListener("mouseleave", () => {
     pending = null;
@@ -355,16 +357,21 @@ export async function createGlobe(element, { token, counties: countyList, onHove
 
     setBuildings,
 
-    /** Buildings on, shadows on, and the camera low over a tall skyline. */
-    async startShadowSimulation(city = "taipei") {
+    /** Buildings on, and the camera low over a tall skyline. */
+    async showCity(city = "taipei") {
       await setBuildings(true);
-      simulating = true;
-      applyShadows();
       const spot = SHADOW_CITIES[city] ?? SHADOW_CITIES.taipei;
       viewer.camera.flyToBoundingSphere(
         new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(spot.lon, spot.lat, 120), 1),
         { offset: new Cesium.HeadingPitchRange(Cesium.Math.toRadians(spot.heading), Cesium.Math.toRadians(spot.pitch), spot.range), duration: 2.4 },
       );
+    },
+
+    /** The skyline, with shadows cast by the buildings. */
+    async startShadowSimulation(city = "taipei") {
+      simulating = true;
+      applyShadows();
+      await this.showCity(city);
     },
 
     stopShadowSimulation() {
@@ -392,8 +399,12 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     },
 
     /** A township sits close in, low enough that its borders are drawn. */
-    flyToTown(town, options = {}) {
-      this.flyToPoint(town.center[0], town.center[1], { range: 60000, ...options });
+    flyToTown(town, { keepHeight = false, ...options } = {}) {
+      // From a click, keep roughly the height the user chose, but never so far
+      // out that townships stop being drawn.
+      const height = viewer.camera.positionCartographic.height;
+      const range = keepHeight ? Math.min(Math.max(height * 1.35, 8000), TOWN_LEVEL * 0.9) : 60000;
+      this.flyToPoint(town.center[0], town.center[1], { range, ...options });
     },
 
     flyToPoint(pointLon, pointLat, { panelOpen = false, range = 190000 } = {}) {
