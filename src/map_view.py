@@ -13,7 +13,7 @@ from src.utils import TEMPERATURE_STYLES, format_update, get_temperature_categor
 def create_base_map() -> folium.Map:
     return folium.Map(
         location=MAP_CENTER, zoom_start=MAP_ZOOM, tiles="OpenStreetMap",
-        control_scale=True, prefer_canvas=True, min_zoom=5, max_zoom=13,
+        control_scale=True, min_zoom=5, max_zoom=13,
         zoom_control=True, scroll_wheel_zoom=True,
     )
 
