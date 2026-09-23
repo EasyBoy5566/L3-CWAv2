@@ -3,6 +3,7 @@
 {% block head %}
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Widgets/widgets.css">
 {% endblock %}
+{% block topbar_extra %}<div class="legend top-legend" id="legend" aria-label="圖例"></div>{% endblock %}
 {% block content %}
 <main class="stage">
   <div id="globe" class="globe" aria-label="臺灣 3D 地圖"></div>
@@ -22,7 +23,6 @@
       <button type="button" role="radio" data-value="mint" aria-checked="false">最低</button>
       <button type="button" role="radio" data-value="pop" aria-checked="false">降雨</button>
     </div>
-    <div class="legend" id="legend"></div>
     <label class="field">
       <span class="control-title">縣市</span>
       <select id="county">
@@ -31,7 +31,8 @@
       </select>
     </label>
 
-    <div class="control-title">資料圖層</div>
+    <details class="group" id="group-overlays" open>
+    <summary class="control-title">資料圖層<span class="count" id="overlay-count"></span></summary>
     <div class="toggles" id="overlays">
       {% for key, name, note in [
         ("rain", "雨量站", "1,341 站 · 24 小時累積"),
@@ -48,8 +49,10 @@
       </label>
       {% endfor %}
     </div>
+    </details>
 
-    <div class="control-title">3D</div>
+    <details class="group" id="group-3d" open>
+    <summary class="control-title">3D</summary>
     <div class="toggles">
       <label class="toggle">
         <input type="checkbox" id="buildings">
@@ -65,6 +68,7 @@
       <button type="button" role="radio" data-value="kaohsiung" aria-checked="false">高雄 85</button>
       <button type="button" role="radio" data-value="taichung" aria-checked="false">臺中七期</button>
     </div>
+    </details>
   </aside>
 
   <div class="dock glass" data-refract="44" role="toolbar" aria-label="日期、時間與檢視">

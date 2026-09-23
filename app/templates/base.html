@@ -13,6 +13,7 @@
   <header class="topbar glass" data-refract="40">
     <a class="brand" href="/"><span class="brand-sun" aria-hidden="true"></span>臺灣 3D 氣象</a>
     <div class="sky" id="sky" aria-live="polite"></div>
+    {% block topbar_extra %}{% endblock %}
     <div class="freshness" id="freshness" role="status" aria-live="polite"></div>
   </header>
   {% block content %}{% endblock %}

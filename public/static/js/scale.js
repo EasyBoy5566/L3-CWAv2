@@ -49,8 +49,9 @@ export function renderLegend(element, scale) {
   const span = scale.max - scale.min;
   const gradient = scale.stops.map(([v, c]) => `${c} ${((v - scale.min) / span) * 100}%`).join(", ");
   element.innerHTML = `
-    <div class="legend-title">${scale.title}</div>
-    <div class="legend-bar" style="background: linear-gradient(90deg, ${gradient})"></div>
-    <div class="legend-ticks">${scale.ticks.map((t) => `<span>${t}</span>`).join("")}</div>
-    <div class="legend-missing">無資料</div>`;
+    <span class="legend-title">${scale.title}</span>
+    <span class="legend-scale">
+      <span class="legend-bar" style="background: linear-gradient(90deg, ${gradient})"></span>
+      <span class="legend-ticks">${scale.ticks.map((t) => `<span>${t}</span>`).join("")}</span>
+    </span>`;
 }

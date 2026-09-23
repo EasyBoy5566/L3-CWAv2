@@ -192,7 +192,13 @@ function miniLegend(legend) {
     <span class="ticks">${stops.map(([v]) => `<b>${v}</b>`).join("")}</span></div>`;
 }
 
+function countOverlays() {
+  const on = document.querySelectorAll("#overlays input:checked").length;
+  $("overlay-count").textContent = on ? ` · ${on}` : "";
+}
+
 function setOverlayStatus(name, text, { error = false, busy = false } = {}) {
+  countOverlays();
   const row = document.querySelector(`.toggle[data-overlay="${name}"]`);
   const note = row.querySelector("small");
   note.textContent = text || note.dataset.note;
@@ -233,6 +239,8 @@ $("buildings").addEventListener("change", async (event) => {
   }
 });
 
+if (window.innerHeight < 820) $("group-overlays").open = false;
+
 const simCities = new Segmented($("sim-cities"), {
   onChange: (city) => {
     state.simCity = city;
@@ -247,7 +255,10 @@ async function setSimulation(on) {
   $("sim-cities").hidden = !on;
   if (on) {
     simCities.place(false);
-    // The city picker sits at the foot of the controls card; bring it into view.
+    // Make room for the city picker: fold the overlay list if the card would overflow.
+    $("group-3d").open = true;
+    const card = document.querySelector(".controls");
+    if (card.scrollHeight > card.clientHeight) $("group-overlays").open = false;
     $("sim-cities").scrollIntoView({ block: "nearest", behavior: "smooth" });
     $("buildings").checked = true;
     if (state.region) closeRegion();

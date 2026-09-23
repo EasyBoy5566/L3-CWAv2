@@ -351,11 +351,13 @@ input[type="range"]::-moz-range-thumb {
 .controls .field { display: grid; gap: 8px; }
 .controls select { width: 100%; }
 
-.legend-bar { height: 8px; border-radius: 4px; box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.3); }
-.legend-ticks { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 5px; font-variant-numeric: tabular-nums; }
-.legend-title { font-size: 12px; color: var(--muted); margin-bottom: 7px; display: flex; justify-content: space-between; }
-.legend-missing { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); margin-top: 4px; }
-.legend-missing::before { content: ""; width: 10px; height: 8px; border-radius: 2px; background: #64748b; }
+/* The layer's colour scale, set in the top bar between the sky and the data times. */
+.top-legend { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.top-legend + .freshness { margin-left: 12px; }
+.legend-title { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.legend-scale { display: grid; gap: 2px; width: 170px; }
+.legend-bar { display: block; height: 6px; border-radius: 3px; box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.3); }
+.legend-ticks { display: flex; justify-content: space-between; font-size: 10px; line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* Bottom dock: date, the sun clock, and view buttons. It slides left when
    the panel opens so the two never overlap. */
@@ -772,12 +774,12 @@ body.page-region { background: transparent; }
 }
 
 /* ---------- overlay and 3D toggles ---------- */
-.toggles { display: grid; gap: 2px; margin-top: -4px; }
+.toggles { display: grid; gap: 0; margin-top: 6px; }
 .toggle {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 8px;
+  padding: 4px 8px;
   border-radius: 12px;
   cursor: pointer;
   transition: background 0.2s;
@@ -847,3 +849,30 @@ body.page-region { background: transparent; }
 .sim-button[aria-pressed="true"] { background: linear-gradient(135deg, rgba(248, 113, 113, 0.3), rgba(190, 18, 60, 0.14)); box-shadow: inset 0 1px 0.5px rgba(254, 202, 202, 0.7), 0 4px 14px rgba(0, 0, 0, 0.25); }
 .sim-icon { font-size: 16px; }
 #sim-cities > button { font-size: 12px; padding: 6px 4px; }
+
+/* Foldable sections of the controls card. */
+.group { display: grid; gap: 8px; }
+.group > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+.group > summary::-webkit-details-marker { display: none; }
+.group > summary::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin-left: auto;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 0.3s var(--ease);
+}
+.group:not([open]) > summary::after { transform: rotate(-45deg); }
+.group > summary:hover { color: var(--text); }
+.group .count { color: var(--accent); font-weight: 700; }
+.group[open] > :not(summary) { animation: unfold 0.3s var(--ease); }
+@keyframes unfold { from { opacity: 0; transform: translateY(-4px); } }
