@@ -115,7 +115,7 @@ export class TyphoonCard {
           <span>${sub}</span>
         </div>
         ${tabs}
-        <button type="button" class="icon-btn ty-close" aria-label="關閉颱風路徑" title="關閉颱風路徑">×</button>
+        <button type="button" class="card-close ty-close" aria-label="關閉颱風路徑" title="關閉颱風路徑"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
       </div>
       <div class="ty-stats"></div>
       <div class="ty-time">

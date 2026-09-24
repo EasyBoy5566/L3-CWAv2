@@ -18,10 +18,8 @@ export class Ticker {
     this.timer = 0;
     this.paused = false;
     root.innerHTML = `
-      <button type="button" class="ticker-item" aria-live="polite"></button>
-      <span class="ticker-count" aria-hidden="true"></span>`;
+      <button type="button" class="ticker-item" aria-live="polite"></button>`;
     this.item = root.querySelector(".ticker-item");
-    this.count = root.querySelector(".ticker-count");
     this.item.addEventListener("click", () => {
       const alert = this.alerts[this.index];
       if (alert) this.onPick?.(alert);
@@ -66,7 +64,6 @@ export class Ticker {
       : `<i class="ticker-mark"></i><span class="ticker-text">目前沒有特別的天氣提醒</span>`;
     this.item.title = alert ? [alert.text, alert.detail].filter(Boolean).join("\n") : "";
     this.item.disabled = !alert;
-    this.count.textContent = this.alerts.length > 1 ? `${this.index + 1}/${this.alerts.length}` : "";
     if (!animate || reducedMotion.matches) {
       this.item.innerHTML = html;
       return;
