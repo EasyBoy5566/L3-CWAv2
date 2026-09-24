@@ -1008,34 +1008,58 @@ body.page-region { background: transparent; }
 }
 
 /* ---------- back to now: one button for the day clock and the typhoon timeline ----------
-   Away from now it is an accent pill with a return arrow; at now (the typhoon
-   card keeps it on screen) it becomes a quiet live marker with a pulsing dot. */
+   A small drop of glass, like the segmented control's pill: clear white glass
+   with a bright top rim, a sheen and a soft shadow; the return arrow carries
+   the accent. At now (the typhoon card keeps it on screen) the glass sinks
+   back to a quiet recess with a pulsing live dot. */
 .now-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   height: 30px;
   padding: 0 13px 0 10px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  color: var(--accent);
+  border: 0;
+  background:
+    radial-gradient(120% 90% at 25% 0%, rgba(255, 255, 255, 0.28), transparent 60%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.06));
+  box-shadow:
+    inset 0 1px 0.5px rgba(255, 255, 255, 0.75),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.18),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.28),
+    0 3px 12px rgba(0, 0, 0, 0.28);
+  -webkit-backdrop-filter: blur(6px) saturate(180%);
+  backdrop-filter: blur(6px) saturate(180%);
+  color: var(--text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
   font: inherit;
   font-size: 12.5px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 0.2s var(--ease), transform 0.15s var(--ease);
   animation: now-in 0.3s var(--ease);
   --radius: 999px;
 }
-.now-btn svg { width: 14px; height: 14px; flex: none; }
-.now-btn:hover { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+.now-btn svg { width: 14px; height: 14px; flex: none; color: var(--accent); filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 60%, transparent)); }
+.now-btn:hover {
+  background:
+    radial-gradient(120% 90% at 25% 0%, rgba(255, 255, 255, 0.36), transparent 60%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.1));
+}
 .now-btn:hover svg { animation: now-spin 0.5s var(--ease); }
 .now-btn:active { transform: scale(0.95); }
 .now-btn[hidden] { display: none; }
 #clock-now { animation: none; }
-.now-btn.is-live { cursor: default; border-color: var(--inner-line); background: var(--inner); color: var(--muted); padding-left: 12px; }
+.now-btn.is-live {
+  cursor: default;
+  padding-left: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  color: var(--muted);
+}
 .now-btn.is-live i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 var(--ok); animation: live 2s ease-out infinite; }
 @keyframes now-in { from { opacity: 0; transform: scale(0.9); } }
 @keyframes now-spin { from { transform: rotate(0); } to { transform: rotate(-360deg); } }
