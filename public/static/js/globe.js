@@ -607,21 +607,10 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       this.flyToPoint(town.center[0], town.center[1], { range, ...options });
     },
 
-    flyToPoint(pointLon, pointLat, { panelOpen = false, range = 190000 } = {}) {
-      const anchor = { lon: pointLon, lat: pointLat };
+    // The left column and the county panel are the same width, so the middle
+    // of the screen is the middle of the map left visible: no offset needed.
+    flyToPoint(lon, lat, { range = 190000 } = {}) {
       const heading = viewer.camera.heading;
-      // With the panel covering the right side, aim at a point to the camera's
-      // right of the county so it lands left of centre. Shifting the target
-      // before the flight keeps it one smooth move; nudging the camera after
-      // it made the view jump at the end.
-      let { lon, lat } = anchor;
-      if (panelOpen) {
-        const shift = range * 0.12; // centres it between the controls card and the panel
-        const bearing = heading + Math.PI / 2;
-        const earth = Cesium.Ellipsoid.WGS84.maximumRadius;
-        lat += Cesium.Math.toDegrees((shift * Math.cos(bearing)) / earth);
-        lon += Cesium.Math.toDegrees((shift * Math.sin(bearing)) / (earth * Math.cos(Cesium.Math.toRadians(anchor.lat))));
-      }
       viewer.camera.flyToBoundingSphere(
         new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(lon, lat), 1),
         {

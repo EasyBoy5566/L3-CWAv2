@@ -148,8 +148,8 @@ function openRegion(name, { push = true, fly = true, origin = null, town = null 
   showTown(town);
   // A county flies in; a township is brought to the centre of the visible map,
   // keeping the height when it was clicked there.
-  if (fly && !town) state.globe?.flyTo(name, { panelOpen: true });
-  else if (fly && town) state.globe?.flyToTown(town, { panelOpen: true, keepHeight: Boolean(origin) });
+  if (fly && !town) state.globe?.flyTo(name);
+  else if (fly && town) state.globe?.flyToTown(town, { keepHeight: Boolean(origin) });
   if (push) history.pushState({}, "", regionUrl(name, town));
   document.title = `${town ? town.town + " · " : ""}${name} · 臺灣 3D 氣象`;
 }
@@ -253,6 +253,8 @@ $("overlays").addEventListener("change", async (event) => {
     if (name === "typhoon") typhoonCard.hide();
     return;
   }
+  // The typhoon takes the map: the county and township cards step aside.
+  if (name === "typhoon" && state.region) closeRegion();
   setOverlayStatus(name, "載入中…", { busy: true });
   try {
     const status = await state.globe.setOverlay(name, true);
