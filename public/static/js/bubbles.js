@@ -1,22 +1,22 @@
 // Glass value bubbles floating over each county.
 //
-// They are HTML, not Cesium labels. After every frame each anchor (a ground
-// point, lifted by the exaggerated terrain height) is projected to the
-// screen, and every county whose point can be seen gets its bubble: one
-// off screen, or under the floating chrome, gets none.
+// They are HTML, not Cesium labels. After every frame each county's label
+// point (see scripts/build_geo.py, lifted by the exaggerated terrain height)
+// is projected to the screen, and every county whose point can be seen gets
+// its bubble: one off screen, or under the floating chrome, gets none.
 //
-// Where each bubble goes is worked out only when the view settles (the camera
-// stops, a panel opens, the values or the window change). Nearest the island's
-// spine first, each takes the first free place, clear of the bubbles already
-// placed, the other counties' points and the floating chrome: above its
-// county; else beside it; else out to sea, away from the spine (Fugui Cape to
-// Eluanbi), so west-coast counties go west, east-coast ones east, and the
-// crowded north fans out from the northern tip. A bubble away from its county
-// is tied to it by a hairline ending in a dot. Bubbles glide to new places.
+// A bubble sits centred on its county. Where that is taken, nearest the
+// island's spine first, it takes the first free place, clear of the bubbles
+// already placed, the other counties' points and the floating chrome: nudged
+// a little; else just beside its county; else out to sea, away from the spine
+// (Fugui Cape to Eluanbi), so west-coast counties go west, east-coast ones
+// east and the crowded north fans out from the northern tip. A bubble that no
+// longer covers its county's point is tied to it by a hairline ending in a dot.
 //
-// While the camera moves nothing is re-placed: each bubble keeps its offset
-// from its county and travels with it, so none of them jump about. A county
-// that comes into view meanwhile is given a free place of its own.
+// Places are worked out every frame, but without flicker: a bubble keeps the
+// place it has for as long as that stays free; when it is taken, moves to the
+// free place nearest where it is, not to the best one far away; returns to a
+// better place only when there is clear room for it; and glides every move.
 /* global Cesium */
 import { escapeHtml } from "./format.js";
 import { colorAt } from "./scale.js";
@@ -26,10 +26,11 @@ const GAP = 4;
 // Floating chrome that bubbles must not slide underneath.
 const OBSTACLES = ".topbar, .controls, .panel:not([hidden]), .typhoon-card:not([hidden])";
 const SVG_NS = "http://www.w3.org/2000/svg";
-// A bubble sits this far above its county's point when it has room there.
-const LIFT = 8;
 // How far inside the map (clear of edges and panels) a county's point must be for its bubble to show.
 const EDGE = 12;
+// Extra room a better place must have before a bubble moves back to it, so
+// one on the edge of fitting does not flip between the two.
+const HYSTERESIS = 14;
 // The main island's spine, north tip to south tip; displaced bubbles move away from it.
 const SPINE = [{ lon: 121.54, lat: 25.29 }, { lon: 120.84, lat: 21.9 }];
 // Out along the ray away from the spine: distances from the county in
@@ -40,16 +41,15 @@ const TURNS = [0, 18, -18, 36, -36, 56, -56, 80, -80];
 // say): the rest of the way round, and further.
 const LAST_REACH = [...REACH, 240, 300];
 const LAST_TURNS = [105, -105, 130, -130, 155, -155, 180];
-// How long a bubble takes to glide to a new place.
-const SETTLE_MS = 380;
-const easeOut = (t) => 1 - (1 - t) ** 3;
+// How quickly a bubble glides to a new place: the gap left after t ms is e^(-t / GLIDE_MS).
+const GLIDE_MS = 110;
 
 function shortNames(names) {
   const stems = names.map((name) => name.replace(/[市縣]$/, ""));
   return new Map(names.map((name, i) => [name, stems.filter((s) => s === stems[i]).length > 1 ? name : stems[i]]));
 }
 
-const overlaps = (a, b) => a.x < b.x + b.w + GAP && b.x < a.x + a.w + GAP && a.y < b.y + b.h + GAP && b.y < a.y + a.h + GAP;
+const overlaps = (a, b, gap = GAP) => a.x < b.x + b.w + gap && b.x < a.x + a.w + gap && a.y < b.y + b.h + gap && b.y < a.y + a.h + gap;
 
 export class Bubbles {
   constructor(container, viewer, anchors, { onHover, onSelect }) {
@@ -66,7 +66,7 @@ export class Bubbles {
     this.short = shortNames([...anchors.keys()]);
     this.items = new Map();
     this.selected = null;
-    this.dirty = true;
+    this.lastFrame = 0;
     this.toWindow = Cesium.SceneTransforms.worldToWindowCoordinates ?? Cesium.SceneTransforms.wgs84ToWindowCoordinates;
 
     for (const [name, { lon, lat }] of anchors) {
@@ -85,6 +85,20 @@ export class Bubbles {
       this.leaders.append(leader);
       this.items.set(name, { element, leader, lon, lat, height: 0, size: null, offset: null, spot: null });
     }
+    // Placing order, nearest the spine first. Measured on the ground, not on
+    // screen, so it never changes as the camera moves and cannot set off a
+    // chain of re-placements.
+    const [a, b] = SPINE;
+    const k = Math.cos((23.7 * Math.PI) / 180);
+    const spineKm = ({ lon, lat }) => {
+      const ax = (b.lon - a.lon) * k;
+      const ay = b.lat - a.lat;
+      const px = (lon - a.lon) * k;
+      const py = lat - a.lat;
+      const t = Math.min(Math.max((px * ax + py * ay) / (ax * ax + ay * ay), 0), 1);
+      return Math.hypot(px - ax * t, py - ay * t) * 111;
+    };
+    this.order = [...this.items.keys()].sort((x, y) => spineKm(this.items.get(x)) - spineKm(this.items.get(y)));
     // Scrolling over a bubble zooms the map, as it does anywhere else: Cesium
     // listens on its canvas, which the bubbles sit above. It zooms towards
     // the last pointer position it saw there, so it is told that first.
@@ -95,15 +109,6 @@ export class Bubbles {
       this.scene.canvas.dispatchEvent(new WheelEvent("wheel", event));
     }, { passive: false });
     this.scene.postRender.addEventListener(() => this.update());
-    this.scene.camera.moveEnd.addEventListener(() => this.relayout());
-    this.scene.morphComplete.addEventListener(() => this.relayout());
-    window.addEventListener("resize", () => this.relayout());
-  }
-
-  /** Work out every bubble's place again on the next frame. */
-  relayout() {
-    this.dirty = true;
-    this.scene.requestRender();
   }
 
   /** Ground heights in metres, as the terrain has them before exaggeration. */
@@ -112,7 +117,7 @@ export class Bubbles {
       const item = this.items.get(name);
       if (item) item.height = height;
     }
-    this.relayout();
+    this.scene.requestRender();
   }
 
   setValues(layer, values, scale) {
@@ -127,55 +132,53 @@ export class Bubbles {
       item.element.classList.toggle("approx", Boolean(values[name]?.approx));
       item.size = null;
     }
-    this.relayout();
+    this.scene.requestRender();
   }
 
   select(name) {
     this.selected = name;
     for (const [key, item] of this.items) item.element.classList.toggle("selected", key === name);
-    this.relayout();
+    this.scene.requestRender();
   }
 
-  // The places for `names`, as offsets of each box from its county's point,
-  // given boxes already taken. See the comment at the top.
-  solve(names, points, taken, width, height) {
+  // Each seen county's place this frame, as the offset of its box from its
+  // point. See the comment at the top.
+  solve(points, chrome, width, height) {
     const marks = [...points.values()].map((p) => ({ x: p.x - 3, y: p.y - 3, w: 6, h: 6 }));
     const [tipA, tipB] = SPINE.map(({ lon, lat }) => this.toWindow(this.scene, Cesium.Cartesian3.fromDegrees(lon, lat, 0)));
     // Away from the nearest point of the spine; a county on the spine itself
     // (Nantou) goes to the side of the spine with the open east coast.
     const fromSpine = (point) => {
-      if (!tipA || !tipB) return { distance: 0, outward: -Math.PI / 2 };
+      if (!tipA || !tipB) return -Math.PI / 2;
       const ax = tipB.x - tipA.x;
       const ay = tipB.y - tipA.y;
       const t = Math.min(Math.max(((point.x - tipA.x) * ax + (point.y - tipA.y) * ay) / (ax * ax + ay * ay || 1), 0), 1);
       const dx = point.x - (tipA.x + ax * t);
       const dy = point.y - (tipA.y + ay * t);
-      const distance = Math.hypot(dx, dy);
-      if (distance > 12) return { distance, outward: Math.atan2(dy, dx) };
+      if (Math.hypot(dx, dy) > 12) return Math.atan2(dy, dx);
       // Perpendicular to the spine, towards the east (screen right when north is up).
       const side = Math.atan2(ax, -ay);
-      return { distance, outward: Math.cos(side) >= 0 ? side : side + Math.PI };
+      return Math.cos(side) >= 0 ? side : side + Math.PI;
     };
-    const spine = new Map(names.map((name) => [name, fromSpine(points.get(name))]));
-    const order = [...names].sort((a, b) =>
-      (b === this.selected) - (a === this.selected) || spine.get(a).distance - spine.get(b).distance);
+    const order = this.order.filter((name) => points.has(name))
+      .sort((a, b) => (b === this.selected) - (a === this.selected));
 
-    const placed = [...taken];
+    const placed = [...chrome];
     const result = new Map();
     for (const name of order) {
       const item = this.items.get(name);
       const point = points.get(name);
       const { w, h } = item.size;
       const others = marks.filter((m) => Math.abs(m.x + 3 - point.x) > 0.5 || Math.abs(m.y + 3 - point.y) > 0.5);
-      const fits = (box) => box.x >= 0 && box.y >= 0 && box.x + box.w <= width && box.y + box.h <= height
-        && !placed.some((p) => overlaps(box, p)) && !others.some((m) => overlaps(box, m));
-      // Places, as the box's centre relative to the county's point.
-      const { outward } = spine.get(name);
+      const fits = (box, gap = GAP) => box.x >= 0 && box.y >= 0 && box.x + box.w <= width && box.y + box.h <= height
+        && !placed.some((p) => overlaps(box, p, gap)) && !others.some((m) => overlaps(box, m, gap));
+      // Places, best first, as the box's centre relative to the county's point:
+      // on it; nudged, still over it; just beside it; then out to sea.
+      const outward = fromSpine(point);
       const candidates = [
-        ["above", 0, -(h / 2 + LIFT)],
-        ["right", w / 2 + 8, 0],
-        ["left", -(w / 2 + 8), 0],
-        ["below", 0, h / 2 + LIFT],
+        ["on", 0, 0],
+        ["up", 0, -h * 0.4], ["down", 0, h * 0.4], ["east", w * 0.3, 0], ["west", -w * 0.3, 0],
+        ["above", 0, -(h / 2 + 8)], ["below", 0, h / 2 + 8], ["right", w / 2 + 8, 0], ["left", -(w / 2 + 8), 0],
       ];
       const ray = (reach, turn) => {
         const angle = outward + (turn * Math.PI) / 180;
@@ -186,14 +189,33 @@ export class Bubbles {
       for (const reach of REACH) for (const turn of TURNS) ray(reach, turn);
       for (const reach of LAST_REACH) for (const turn of [...(reach > REACH.at(-1) ? TURNS : []), ...LAST_TURNS]) ray(reach, turn);
       const boxOf = ([, dx, dy]) => ({ x: point.x + dx - w / 2, y: point.y + dy - h / 2, w, h });
-      // Above its county if free; otherwise the place it had, if still free;
-      // otherwise the first free one. With nowhere free it stays above its
-      // county, overlapping, but shown.
-      let choice = candidates[0];
-      if (!fits(boxOf(choice))) {
-        const previous = item.spot && candidates.find((c) => c[0] === item.spot);
-        choice = (previous && fits(boxOf(previous)) ? previous : candidates.find((c) => fits(boxOf(c)))) ?? candidates[0];
+
+      // A bubble with no place yet takes the best free one. One with a place
+      // keeps it while it stays free, unless a better one has clear room;
+      // when its place is taken it moves to the free place nearest where it
+      // is. With nowhere free it sits on its county, overlapping, but shown.
+      const rank = new Map(candidates.map((c, i) => [c[0], i]));
+      const current = item.spot !== null && rank.has(item.spot) ? candidates[rank.get(item.spot)] : null;
+      let choice;
+      if (!current) {
+        choice = candidates.find((c) => fits(boxOf(c)));
+      } else {
+        choice = candidates.slice(0, rank.get(current[0])).find((c) => fits(boxOf(c), GAP + HYSTERESIS));
+        if (!choice && fits(boxOf(current))) choice = current;
+        if (!choice) {
+          const here = item.offset ?? { dx: current[1] - w / 2, dy: current[2] - h / 2 };
+          let nearest = Infinity;
+          for (const c of candidates) {
+            const box = boxOf(c);
+            const moved = Math.hypot(box.x - point.x - here.dx, box.y - point.y - here.dy);
+            if (moved < nearest && fits(box)) {
+              nearest = moved;
+              choice = c;
+            }
+          }
+        }
       }
+      choice ??= candidates[0];
       const box = boxOf(choice);
       placed.push(box);
       result.set(name, { spot: choice[0], dx: box.x - point.x, dy: box.y - point.y });
@@ -216,7 +238,6 @@ export class Bubbles {
         item.element.querySelector(".name").textContent = far ? this.short.get(name) : name;
         item.size = null;
       }
-      // Only the camera crosses this height, and it relays out when it stops.
     }
 
     // ---- reads ----
@@ -224,11 +245,6 @@ export class Bubbles {
       const r = el.getBoundingClientRect();
       return { x: r.left, y: r.top, w: r.width, h: r.height };
     });
-    const chromeKey = chrome.map((r) => `${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.w)},${Math.round(r.h)}`).join(";");
-    if (chromeKey !== this.chromeKey) {
-      this.chromeKey = chromeKey;
-      this.dirty = true; // a panel opened, closed or moved
-    }
     for (const item of this.items.values()) {
       if (!item.size) item.size = { w: item.element.offsetWidth, h: item.element.offsetHeight };
     }
@@ -253,51 +269,34 @@ export class Bubbles {
 
     // ---- places ----
     const now = performance.now();
+    const dt = Math.min(now - (this.lastFrame || now), 100);
+    this.lastFrame = now;
+    // Share of the way to its new place a bubble moves this frame.
+    const step = 1 - Math.exp(-dt / GLIDE_MS);
+    const places = this.solve(points, chrome, width, height);
+    let gliding = false;
     for (const [name, item] of this.items) {
-      if (!points.has(name)) {
-        item.offset = null; // placed afresh when it comes back into view
-        item.tween = null;
+      const place = places.get(name);
+      if (!place) {
+        item.offset = null; // appears at its place when it comes back into view
+        item.spot = null;
+        continue;
       }
-    }
-    const current = (item) => {
-      if (!item.tween) return item.offset;
-      const t = Math.min((now - item.tween.start) / SETTLE_MS, 1);
-      const e = easeOut(t);
-      const { from, to } = item.tween;
-      return { dx: from.dx + (to.dx - from.dx) * e, dy: from.dy + (to.dy - from.dy) * e };
-    };
-    if (this.dirty) {
-      this.dirty = false;
-      const places = this.solve([...points.keys()], points, chrome, width, height);
-      for (const [name, place] of places) {
-        const item = this.items.get(name);
-        const from = current(item);
-        item.spot = place.spot;
+      item.spot = place.spot;
+      if (!item.offset) {
         item.offset = { dx: place.dx, dy: place.dy };
-        // Already on screen: glide there. New on screen: just appear there.
-        item.tween = from && Math.hypot(from.dx - place.dx, from.dy - place.dy) > 1 ? { from, to: item.offset, start: now } : null;
+        continue;
       }
-    } else {
-      // Counties that came into view while the camera moved get a free place,
-      // leaving everyone else where they are.
-      const fresh = [...points.keys()].filter((name) => !this.items.get(name).offset);
-      if (fresh.length) {
-        const taken = [...chrome];
-        for (const [name, point] of points) {
-          const item = this.items.get(name);
-          const offset = item.offset && current(item);
-          if (offset) taken.push({ x: point.x + offset.dx, y: point.y + offset.dy, w: item.size.w, h: item.size.h });
-        }
-        for (const [name, place] of this.solve(fresh, points, taken, width, height)) {
-          const item = this.items.get(name);
-          item.spot = place.spot;
-          item.offset = { dx: place.dx, dy: place.dy };
-        }
+      const gap = Math.hypot(place.dx - item.offset.dx, place.dy - item.offset.dy);
+      if (gap < 0.5) {
+        item.offset = { dx: place.dx, dy: place.dy };
+      } else {
+        item.offset = { dx: item.offset.dx + (place.dx - item.offset.dx) * step, dy: item.offset.dy + (place.dy - item.offset.dy) * step };
+        gliding = true;
       }
     }
 
     // ---- writes ----
-    let gliding = false;
     for (const [name, item] of this.items) {
       const point = points.get(name);
       const tucked = !point;
@@ -309,23 +308,20 @@ export class Bubbles {
         this.showLeader(item, false);
         continue;
       }
-      const offset = current(item);
-      if (item.tween && now - item.tween.start >= SETTLE_MS) item.tween = null;
-      else if (item.tween) gliding = true;
       const { w, h } = item.size;
-      const box = { x: point.x + offset.dx, y: point.y + offset.dy, w, h };
+      const box = { x: point.x + item.offset.dx, y: point.y + item.offset.dy, w, h };
       const transform = `translate(${box.x.toFixed(1)}px, ${box.y.toFixed(1)}px)`;
       if (item.transform !== transform) {
         item.transform = transform;
         item.element.style.transform = transform;
       }
-      // A leader whenever the bubble is not sitting just above its county.
-      const away = Math.hypot(offset.dx + w / 2, offset.dy + h + LIFT) > 3;
+      // A leader once the bubble no longer covers its county's point.
+      const ex = Math.min(Math.max(point.x, box.x + 10), box.x + box.w - 10);
+      const ey = Math.min(Math.max(point.y, box.y), box.y + box.h);
+      const away = Math.hypot(point.x - Math.min(Math.max(point.x, box.x), box.x + box.w), point.y - Math.min(Math.max(point.y, box.y), box.y + box.h)) > 4;
       this.showLeader(item, away);
       if (away) {
         // From the point on the bubble's edge nearest the county to the county.
-        const ex = Math.min(Math.max(point.x, box.x + 10), box.x + box.w - 10);
-        const ey = Math.min(Math.max(point.y, box.y), box.y + box.h);
         const key = `${ex.toFixed(1)},${ey.toFixed(1)},${point.x.toFixed(1)},${point.y.toFixed(1)}`;
         if (item.leaderKey !== key) {
           item.leaderKey = key;

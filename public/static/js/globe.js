@@ -25,28 +25,6 @@ export const SHADOW_CITIES = {
   taichung: { label: "臺中 七期", lon: 120.6440, lat: 24.1630, heading: 0, pitch: -26, range: 2400 },
 };
 
-// Bubble anchors inside each county, spread so the crowded north and the
-// county/city pairs (Hsinchu, Chiayi) do not stack at the default view.
-// Counties not listed use CWA's representative point.
-const LABEL_POINTS = {
-  基隆市: [25.13, 121.74],
-  臺北市: [25.09, 121.56],
-  新北市: [24.93, 121.50],
-  桃園市: [24.86, 121.24],
-  宜蘭縣: [24.62, 121.69],
-  新竹市: [24.80, 120.94],
-  新竹縣: [24.66, 121.18],
-  苗栗縣: [24.49, 120.93],
-  臺中市: [24.24, 120.92],
-  彰化縣: [23.98, 120.47],
-  南投縣: [23.84, 120.98],
-  嘉義縣: [23.33, 120.72],
-  高雄市: [22.98, 120.56],
-  屏東縣: [22.55, 120.62],
-  花蓮縣: [23.75, 121.42],
-  臺東縣: [22.95, 121.08],
-};
-
 // Imagery is lit with the globe, so draped overlays darken at night; these
 // brightness factors keep them readable after dark.
 const OVERLAY_BRIGHTNESS = { day: 1, dusk: 1.4, night: 1.8 };
@@ -332,9 +310,11 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   };
 
   // ---------- bubbles ----------
+  // Each county's label point, from its shape (centroid, or pole of
+  // inaccessibility; see scripts/build_geo.py). CWA's point if it has none.
   const anchors = new Map(countyList.map(({ name, lat, lon }) => {
-    const [aLat, aLon] = LABEL_POINTS[name] ?? [lat, lon];
-    return [name, { lat: aLat, lon: aLon }];
+    const label = counties.find((c) => c.name === name)?.label;
+    return [name, label ? { lon: label[0], lat: label[1] } : { lat, lon }];
   }));
   const bubbles = new Bubbles(element.parentElement, viewer, anchors, {
     onHover: (name, position) => {
