@@ -344,17 +344,29 @@ let closeTimer = 0;
 let morphTimer = 0;
 function setControlsOpen(open) {
   if (controls.classList.contains("open") === open) return;
-  // Mid-morph the glass keeps its blur but not its refraction, whose map is
-  // made for one size; it is rebuilt once, at the new size.
-  controls.classList.add("morphing");
+  // The card's height springs from the old size to the new one: opening
+  // overshoots a little and settles; closing tucks in with a smaller bounce.
+  const from = controls.getBoundingClientRect().height;
+  controls.getAnimations().forEach((animation) => animation.cancel());
   controls.classList.toggle("open", open);
   $("controls-peek").setAttribute("aria-expanded", String(open));
   $("controls-body").inert = !open;
+  const to = controls.getBoundingClientRect().height;
+  // Mid-morph the glass keeps its blur but not its refraction, whose map is
+  // made for one size; it is rebuilt once, at the new size.
+  controls.classList.add("morphing");
+  const duration = prefersReducedMotion() ? 0 : open ? 700 : 520;
+  if (duration) {
+    controls.animate(
+      [{ height: `${from}px`, overflow: "hidden" }, { height: `${to}px`, overflow: "hidden" }],
+      { duration, easing: springEasing(open ? "spring" : "spring-soft") },
+    );
+  }
   clearTimeout(morphTimer);
   morphTimer = setTimeout(async () => {
     await refractNow(controls);
     controls.classList.remove("morphing");
-  }, prefersReducedMotion() ? 0 : 650);
+  }, duration + 30);
 }
 // Kept open while a keyboard user is in it or one of its menus is open (a
 // menu sits on <body>, so the pointer leaves the card to use it).

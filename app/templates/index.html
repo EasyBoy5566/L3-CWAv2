@@ -77,8 +77,8 @@
       </select>
     </label>
 
-    <details class="group" id="group-map" open>
-    <summary class="control-title">地圖圖層</summary>
+    <section class="group" id="group-map">
+    <div class="control-title">地圖圖層</div>
     <div class="toggles" id="overlays">
       <label class="toggle" data-overlay="typhoon">
         <input type="checkbox" data-overlay="typhoon">
@@ -86,10 +86,10 @@
         <span class="toggle-text">颱風路徑<small data-note="路徑與 70% 潛勢">路徑與 70% 潛勢</small></span>
       </label>
     </div>
-    </details>
+    </section>
 
-    <details class="group" id="group-3d" open>
-    <summary class="control-title">3D</summary>
+    <section class="group" id="group-3d">
+    <div class="control-title">3D</div>
     <div class="toggles">
       <label class="toggle">
         <input type="checkbox" id="buildings">
@@ -104,7 +104,7 @@
         <button type="button" role="radio" data-value="kaohsiung" aria-checked="false"><b>南</b>高雄 85</button>
       </div>
     </div>
-    </details>
+    </section>
     </div>
     </div>
 
@@ -115,7 +115,7 @@
 
   <div id="hover" class="hover-card glass" hidden></div>
 
-  <section id="panel" class="panel glass glass-strong" data-refract="48" aria-label="縣市天氣" hidden>
+  <section id="panel" class="panel glass" data-refract="48" aria-label="縣市天氣" hidden>
     <button type="button" class="panel-close icon-btn" id="panel-close" aria-label="關閉">×</button>
     <div id="panel-body" class="panel-body"></div>
   </section>

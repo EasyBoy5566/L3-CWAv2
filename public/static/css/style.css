@@ -382,14 +382,12 @@ input[type="range"]::-moz-range-thumb {
 .peek-chevron { width: 10px; height: 6px; margin-left: auto; color: var(--muted); transition: transform 0.4s var(--ease); }
 .controls.open .peek-chevron { transform: rotate(180deg); }
 @media (hover: none) { .controls-peek { cursor: pointer; } }
-.controls-body {
-  display: grid;
-  grid-template-rows: 0fr;
-  opacity: 0;
-  transition: grid-template-rows 0.6s var(--spring-soft), opacity 0.25s ease;
-}
-.controls.open .controls-body { grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows 0.6s var(--spring-soft), opacity 0.35s ease 0.08s; }
-.controls-inner { display: grid; gap: 12px; min-height: 0; overflow: hidden; padding: 2px 2px 14px; }
+/* Folded, the body takes no room; main.js springs the card's height between
+   the two sizes, so it overshoots a little and settles, like a drop of water. */
+.controls-body { display: none; }
+.controls.open .controls-body { display: block; animation: controls-in 0.4s ease 0.05s both; }
+.controls-inner { display: grid; gap: 12px; padding: 2px 2px 14px; }
+@keyframes controls-in { from { opacity: 0; translate: 0 -6px; } }
 .controls .card-legend { margin-top: 2px; }
 /* While it unfolds or folds, blur alone: the refraction map fits one size. */
 .controls.morphing {
@@ -397,7 +395,7 @@ input[type="range"]::-moz-range-thumb {
   backdrop-filter: blur(var(--glass-blur)) saturate(190%) brightness(1.06) !important;
 }
 @media (prefers-reduced-motion: reduce) {
-  .controls-body, .controls.open .controls-body { transition: none; }
+  .controls.open .controls-body { animation: none; }
 }
 .control-title { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--muted); }
 .controls .field { display: grid; gap: 8px; }
@@ -838,29 +836,7 @@ body.page-region { background: transparent; }
 
 /* Foldable sections of the controls card. */
 .group { display: grid; gap: 8px; }
-.group > summary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  list-style: none;
-  cursor: pointer;
-  user-select: none;
-}
-.group > summary::-webkit-details-marker { display: none; }
-.group > summary::after {
-  content: "";
-  width: 7px;
-  height: 7px;
-  margin-left: auto;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(45deg) translateY(-2px);
-  transition: transform 0.3s var(--ease);
-}
-.group:not([open]) > summary::after { transform: rotate(-45deg); }
-.group > summary:hover { color: var(--text); }
 .group .count { color: var(--accent); font-weight: 700; }
-.group[open] > :not(summary) { animation: unfold 0.3s var(--ease); }
 @keyframes unfold { from { opacity: 0; transform: translateY(-4px); } }
 
 /* ---------- township card, above the county hero ---------- */

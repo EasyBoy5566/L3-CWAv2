@@ -201,10 +201,14 @@ export class RegionView {
   }
 
   // When the hero scrolls away, a one-line header takes its place, as in iOS.
+  // Only once it has gone up past the top: a tall township card above it (a
+  // mountain township with many stations) pushes it below the bottom, and
+  // that is not scrolling past it.
   watchHero() {
     const compact = this.part("compact");
     this.heroObserver = new IntersectionObserver(([entry]) => {
-      compact.classList.toggle("shown", !entry.isIntersecting);
+      const above = entry.boundingClientRect.bottom <= (entry.rootBounds?.top ?? 0);
+      compact.classList.toggle("shown", !entry.isIntersecting && above);
     }, { root: this.container, threshold: 0, rootMargin: "-60px 0px 0px 0px" });
     this.heroObserver.observe(this.part("hero"));
   }
