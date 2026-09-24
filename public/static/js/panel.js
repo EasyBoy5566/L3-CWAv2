@@ -64,8 +64,14 @@ function dragToScroll(list) {
 
 // ---------- township card ----------
 
+// A township is shown above its county. Each is tagged with its scope, and a
+// labelled rule marks where the county's own weather begins.
 function townHead(town) {
-  return `<div class="town-head"><h3>${escapeHtml(town.town)}</h3><span>${escapeHtml(town.county)} · 鄉鎮</span></div>`;
+  return `<div class="town-head"><span class="scope-tag">鄉鎮</span><h3>${escapeHtml(town.town)}</h3><span>${escapeHtml(town.county)}</span></div>`;
+}
+
+function countyRule(town) {
+  return `<div class="scope-rule" role="separator"><span>${escapeHtml(town.county)} 全縣</span></div>`;
 }
 
 // Where each gauge's marker sits: heat-injury index 24–38, UV 0–12.
@@ -241,7 +247,7 @@ export class RegionView {
     const summary = (periods[0]?.description ?? "").split("。").filter(Boolean).slice(0, 2).join("。");
     // The feels-like temperature lives in the details card below.
     this.part("hero").innerHTML = `
-      <h2 class="wx-name">${escapeHtml(name)}</h2>
+      <h2 class="wx-name"><span class="scope-tag">縣市</span>${escapeHtml(name)}</h2>
       <div class="wx-now">
         <div class="wx-temp">${temperature === null ? "—" : Math.round(temperature)}<span>°</span></div>
         <div class="wx-side">
@@ -415,11 +421,11 @@ export class RegionView {
     const element = this.part("town");
     this.town = town;
     element.hidden = false;
-    element.innerHTML = `${townHead(town)}<div class="wx-card lens town-card"><div class="skeleton town-skeleton"></div></div>`;
+    element.innerHTML = `${townHead(town)}<div class="wx-card lens town-card"><div class="skeleton town-skeleton"></div></div>${countyRule(town)}`;
     this.container.scrollTo({ top: 0, behavior: "smooth" });
     const data = await townData.forTown(town, sections);
     if (this.town !== town || !element.isConnected) return; // another township was picked meanwhile
-    element.innerHTML = `${townHead(town)}<div class="wx-card lens town-card">${townBody(data)}</div>`;
+    element.innerHTML = `${townHead(town)}<div class="wx-card lens town-card">${townBody(data)}</div>${countyRule(town)}`;
   }
 
   hideTown() {

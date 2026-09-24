@@ -2,7 +2,7 @@
 import { getJSON } from "./api.js";
 import { loadECharts } from "./charts.js";
 import { dayLabel, escapeHtml, hhmm, num } from "./format.js";
-import { GlassSelect, Segmented, prefersReducedMotion, refract, refractNow, revealInline, setSky, springEasing } from "./glass.js";
+import { GlassSelect, Segmented, prefersReducedMotion, refract, revealInline, setSky, springEasing, stretchRefraction } from "./glass.js";
 import { createGlobe } from "./globe.js";
 import { renderFreshness } from "./header.js";
 import { RegionView } from "./panel.js";
@@ -352,21 +352,30 @@ function setControlsOpen(open) {
   $("controls-peek").setAttribute("aria-expanded", String(open));
   $("controls-body").inert = !open;
   const to = controls.getBoundingClientRect().height;
-  // Mid-morph the glass keeps its blur but not its refraction, whose map is
-  // made for one size; it is rebuilt once, at the new size.
+  // The glass's refraction follows the height frame by frame (its maps
+  // stretch rather than rebuild; glass.js), so the rim holds throughout.
+  // "morphing" keeps the resize observer from rebuilding it meanwhile.
   controls.classList.add("morphing");
   const duration = prefersReducedMotion() ? 0 : open ? 700 : 520;
-  if (duration) {
-    controls.animate(
-      [{ height: `${from}px`, overflow: "hidden" }, { height: `${to}px`, overflow: "hidden" }],
-      { duration, easing: springEasing(open ? "spring" : "spring-soft") },
-    );
-  }
-  clearTimeout(morphTimer);
-  morphTimer = setTimeout(async () => {
-    await refractNow(controls);
+  cancelAnimationFrame(morphTimer);
+  if (!duration) {
+    stretchRefraction(controls, to);
     controls.classList.remove("morphing");
-  }, duration + 30);
+    return;
+  }
+  const animation = controls.animate(
+    [{ height: `${from}px`, overflow: "hidden" }, { height: `${to}px`, overflow: "hidden" }],
+    { duration, easing: springEasing(open ? "spring" : "spring-soft") },
+  );
+  const follow = () => {
+    stretchRefraction(controls, controls.getBoundingClientRect().height);
+    if (animation.playState === "running") morphTimer = requestAnimationFrame(follow);
+  };
+  follow();
+  animation.finished.then(() => {
+    stretchRefraction(controls, to);
+    controls.classList.remove("morphing");
+  }, () => {});
 }
 // Kept open while a keyboard user is in it or one of its menus is open (a
 // menu sits on <body>, so the pointer leaves the card to use it).

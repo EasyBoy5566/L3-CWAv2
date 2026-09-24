@@ -62,8 +62,9 @@ const LIGHT = [-0.62, -0.78]; // from the top left
 
 // The displacement map (red x, green y) and the specular map (white, alpha
 // the highlight) for a w×h rounded rectangle, as canvases.
+const MAP_SCALE = 0.5; // half resolution is plenty; feImage stretches it back
 function glassMaps(width, height, radius, bezel) {
-  const scale = 0.5; // half resolution is plenty; feImage stretches it back
+  const scale = MAP_SCALE;
   const cw = Math.max(2, Math.ceil(width * scale));
   const ch = Math.max(2, Math.ceil(height * scale));
   const make = () => {
@@ -144,14 +145,21 @@ function build(element) {
     const channel = (name, matrix) => `
       <feDisplacementMap in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="G" data-spread="${name}"/>
       <feColorMatrix type="matrix" values="${matrix}" result="${name}"/>`;
+    // Each map is three slices stacked: the top edge, a thin middle strip
+    // (only the side bezels) stretched to fill, and the bottom edge. A change
+    // of height then moves the bottom slice and stretches the middle one,
+    // with no new maps (stretchRefraction), so the rim holds while it morphs.
+    const slices = (name) => ["top", "mid", "bottom"].map((part) =>
+      `<feImage data-map="${name}" data-part="${part}" preserveAspectRatio="none" x="0" result="${name}-${part}"/>`).join("")
+      + `<feMerge result="${name}">${["top", "mid", "bottom"].map((part) => `<feMergeNode in="${name}-${part}"/>`).join("")}</feMerge>`;
     filter.innerHTML = `
-      <feImage result="map" preserveAspectRatio="none" x="0" y="0"/>
+      ${slices("map")}
       ${channel("r", "1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0")}
       ${channel("g", "0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0")}
       ${channel("b", "0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0")}
       <feBlend in="r" in2="g" mode="screen" result="rg"/>
       <feBlend in="rg" in2="b" mode="screen" result="refracted"/>
-      <feImage result="shine" preserveAspectRatio="none" x="0" y="0"/>
+      ${slices("shine")}
       <feBlend in="shine" in2="refracted" mode="screen"/>`;
     defs.append(filter);
   }
@@ -161,26 +169,57 @@ function build(element) {
   const version = (entry.version ?? 0) + 1;
   entry.version = version;
   const maps = glassMaps(width, height, radius, bezel);
-  return Promise.all([maps.displacement, maps.specular].map(blobUrl)).then(([displacement, specular]) => {
+  // The edge slices reach past the corners and the bezel, in whole map pixels.
+  const capPx = Math.max(1, Math.min(Math.ceil((Math.max(radius, bezel) + 2) * MAP_SCALE), Math.floor(maps.displacement.height / 2)));
+  const cut = (canvas) => [0, Math.floor(canvas.height / 2), canvas.height - capPx].map((y, i) => {
+    const slice = document.createElement("canvas");
+    slice.width = canvas.width;
+    slice.height = i === 1 ? 1 : capPx;
+    slice.getContext("2d").drawImage(canvas, 0, y, canvas.width, slice.height, 0, 0, canvas.width, slice.height);
+    return slice;
+  });
+  const pieces = [...cut(maps.displacement), ...cut(maps.specular)];
+  return Promise.all(pieces.map(blobUrl)).then((urls) => {
     if (entry.version !== version || !element.isConnected) {
-      URL.revokeObjectURL(displacement);
-      URL.revokeObjectURL(specular);
+      urls.forEach((url) => URL.revokeObjectURL(url));
       return;
     }
-    for (const [name, value] of [["x", 0], ["y", 0], ["width", width], ["height", height]]) filter.setAttribute(name, value);
-    const [map, shine] = filter.querySelectorAll("feImage");
-    for (const [image, href] of [[map, displacement], [shine, specular]]) {
+    const images = filter.querySelectorAll("feImage");
+    images.forEach((image, i) => {
       image.setAttribute("width", width);
-      image.setAttribute("height", height);
-      image.setAttribute("href", href);
-    }
+      image.setAttribute("href", urls[i]);
+    });
+    entry.cap = capPx / MAP_SCALE;
+    stretch(filter, entry, width, height);
     // Red bends least and blue most, as in glass; the spread is a few percent.
     const spread = { r: 0.94, g: 1, b: 1.07 };
     for (const node of filter.querySelectorAll("feDisplacementMap")) node.setAttribute("scale", strength * spread[node.dataset.spread]);
     for (const url of entry.urls ?? []) URL.revokeObjectURL(url);
-    entry.urls = [displacement, specular];
+    entry.urls = urls;
     element.style.backdropFilter = `url(#${entry.id}) blur(${blur}) saturate(190%) brightness(1.06)`;
   }, () => {});
+}
+
+// Fit a built filter to `height`: the top slice stays, the bottom one moves,
+// the middle one stretches between them.
+function stretch(filter, entry, width, height) {
+  const cap = Math.min(entry.cap, height / 2);
+  for (const [name, value] of [["x", 0], ["y", 0], ["width", width], ["height", height]]) filter.setAttribute(name, value);
+  for (const image of filter.querySelectorAll("feImage")) {
+    const part = image.dataset.part;
+    const y = part === "top" ? 0 : part === "mid" ? cap : height - cap;
+    image.setAttribute("y", y);
+    image.setAttribute("height", Math.max(part === "mid" ? height - 2 * cap : cap, 0));
+  }
+}
+
+/** Follow a change of height (a card unfolding) without rebuilding the maps. */
+export function stretchRefraction(element, height) {
+  const entry = registry.get(element);
+  const filter = entry && defs?.querySelector(`#${entry.id}`);
+  if (!filter || !entry.cap || !entry.width) return;
+  entry.height = Math.round(height);
+  stretch(filter, entry, entry.width, height);
 }
 
 const blobUrl = (canvas) => new Promise((resolve, reject) => {
@@ -195,7 +234,7 @@ function schedule(element) {
   // Wait for layout to settle (panels resize as their content loads).
   frame = setTimeout(() => {
     frame = 0;
-    // An element mid-morph is rebuilt by refractNow() once it has its final size.
+    // An element mid-morph follows its height through stretchRefraction() instead.
     for (const item of pending) if (item.isConnected && !item.classList.contains("morphing")) build(item);
     pending.clear();
   }, 120);
@@ -218,14 +257,6 @@ export function refract(root = document) {
     observer.observe(element);
     schedule(element);
   }
-}
-
-/** Rebuild one element's refraction for its size now; resolves once it is applied. */
-export async function refractNow(element) {
-  const entry = registry.get(element);
-  if (!refractionEnabled || !entry) return;
-  entry.width = 0;
-  await build(element);
 }
 
 /** Rebuild after a style change that alters blur (the sky tint does). */
