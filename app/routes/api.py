@@ -9,7 +9,7 @@ from datetime import date, timedelta
 
 from flask import Blueprint, abort, jsonify, request
 
-from app import config, freshness, overlays, queries
+from app import alerts, config, freshness, overlays, queries
 from app.db import get_database
 from app.errors import WeatherError
 from app.routes import county_from_path
@@ -88,6 +88,12 @@ def overlay(name: str):
     if name not in overlays.NAMES:
         abort(404)
     return _cached(overlays.overlay(name, get_database()), overlays.TTL[name])
+
+
+@bp.get("/alerts")
+def weather_alerts():
+    """The top bar's ticker: official warnings, then what the forecasts imply."""
+    return _cached(alerts.alerts(get_database()), 300)
 
 
 @bp.get("/region")
