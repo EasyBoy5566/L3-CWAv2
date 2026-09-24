@@ -109,7 +109,7 @@ export class TyphoonCard {
       .filter(Boolean).map(escapeHtml).join(" · ");
     this.root.innerHTML = `
       <div class="ty-head">
-        <svg class="ty-symbol" viewBox="-32 -32 64 64" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"><circle r="10"/><path d="M0 -10Q19 -10 25 -25M0 10Q-19 10 -25 25"/></g></svg>
+        <span class="ty-badge" aria-hidden="true"><svg class="ty-symbol" viewBox="-32 -32 64 64"><g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"><circle r="10"/><path d="M0 -10Q19 -10 25 -25M0 10Q-19 10 -25 25"/></g></svg></span>
         <div class="ty-title">
           <div><b>${escapeHtml(cyclone.name ?? "")}</b><span class="ty-class"></span></div>
           <span>${sub}</span>
@@ -138,7 +138,8 @@ export class TyphoonCard {
     const $ = (selector) => this.root.querySelector(selector);
     this.root.style.setProperty("--ty", cls.color);
     $(".ty-range").value = String(hours);
-    $(".ty-class").textContent = cls.name;
+    // The class in words on glass; its colour only as a dot.
+    $(".ty-class").innerHTML = `<i style="background:${cls.color}"></i>${escapeHtml(cls.name)}`;
     $(".ty-when").innerHTML = `<b>${when(p.at ?? this.line.now + hours * HOUR)}</b><span>${relative(hours)}</span>`;
     // At the latest fix the button is a live marker; anywhere else it brings you back.
     // Rewritten only when it switches: a fresh icon under the pointer would

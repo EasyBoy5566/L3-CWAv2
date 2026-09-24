@@ -957,22 +957,27 @@ body.page-region { background: transparent; }
   width: min(620px, calc(100vw - var(--panel-w) - 344px));
 }
 .ty-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.ty-symbol { flex: none; width: 34px; height: 34px; color: var(--ty); filter: drop-shadow(0 0 8px var(--ty)); animation: ty-spin 3s linear infinite; }
+.ty-badge { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; }
+.ty-symbol { width: 24px; height: 24px; color: var(--text); filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); animation: ty-spin 6s linear infinite; }
 @keyframes ty-spin { to { transform: rotate(-360deg); } }
 .ty-title { display: grid; min-width: 0; }
 .ty-title > div { display: flex; align-items: center; gap: 8px; }
 .ty-title b { font-size: 19px; font-weight: 700; letter-spacing: 0.06em; line-height: 1.25; }
 .ty-title > span { font-size: 11.5px; color: var(--muted); letter-spacing: 0.02em; white-space: nowrap; }
 .ty-class {
-  padding: 1px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 10px 0 8px;
   border-radius: 999px;
   font-size: 11.5px;
-  font-weight: 700;
-  color: var(--ty);
-  background: color-mix(in srgb, var(--ty) 18%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ty) 40%, transparent);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text);
   white-space: nowrap;
 }
+.ty-class i { width: 7px; height: 7px; border-radius: 50%; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.5); }
 .ty-tabs { display: flex; gap: 4px; margin-left: 6px; }
 .ty-tabs .chip { padding: 3px 10px; font-size: 12px; }
 .ty-tabs .chip.on { background: rgba(255, 255, 255, 0.22); }
@@ -1145,3 +1150,47 @@ body.page-region { background: transparent; }
   .icon-btn:active, .chip:active, .now-btn:active, .ty-play:active, .gselect-trigger:active { transform: none; }
   .typhoon-card:not([hidden]), .hover-card:not([hidden]), .loading-card { animation: none; }
 }
+
+/* ==========================================================================
+   Glass drops: the small glass on the cards (back-to-now, play, the typhoon's
+   badge, class and scope tags), one material, a smaller .glass: clear white
+   glass with a sheen along the top, and a rim of light brightest at the top
+   left and again at the bottom right.
+   ========================================================================== */
+.now-btn, .ty-play, .ty-badge, .ty-class, .scope-tag {
+  position: relative;
+  isolation: isolate;
+  border: 0;
+  background:
+    radial-gradient(120% 90% at 28% 0%, rgba(255, 255, 255, 0.3), transparent 62%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.05));
+  box-shadow:
+    inset 0 1px 0.5px rgba(255, 255, 255, 0.7),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.16),
+    0 3px 12px rgba(0, 0, 0, 0.26);
+  -webkit-backdrop-filter: blur(6px) saturate(180%) brightness(1.08);
+  backdrop-filter: blur(6px) saturate(180%) brightness(1.08);
+}
+.ty-class, .scope-tag { box-shadow: inset 0 1px 0.5px rgba(255, 255, 255, 0.65), inset 0 -1px 1px rgba(255, 255, 255, 0.14), 0 2px 6px rgba(0, 0, 0, 0.2); }
+.now-btn::before, .ty-play::before, .ty-badge::before, .ty-class::before, .scope-tag::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.12) 35%, rgba(255, 255, 255, 0) 55%, rgba(255, 255, 255, 0.12) 75%, rgba(255, 255, 255, 0.55));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+.now-btn:hover, .ty-play:hover {
+  background:
+    radial-gradient(120% 90% at 28% 0%, rgba(255, 255, 255, 0.4), transparent 62%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.09));
+}
+/* At now, back-to-now sinks to a recess: no drop, no rim. */
+.now-btn.is-live { background: rgba(0, 0, 0, 0.2); box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 -1px 0 rgba(255, 255, 255, 0.08); -webkit-backdrop-filter: none; backdrop-filter: none; }
+.now-btn.is-live::before { display: none; }
+@media (prefers-reduced-motion: reduce) { .ty-symbol { animation: none; } }
