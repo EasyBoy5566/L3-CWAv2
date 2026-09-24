@@ -55,6 +55,13 @@
   <div id="fallback" class="fallback" hidden></div>
 
   <aside class="controls glass" data-refract aria-label="地圖圖層">
+    <button type="button" class="controls-peek" id="controls-peek" aria-expanded="false" aria-controls="controls-body">
+      <svg class="peek-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 1.8 5.2 8 8.4l6.2-3.2z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="m1.8 8.1 6.2 3.2 6.2-3.2M1.8 11 8 14.2l6.2-3.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/></svg>
+      <span class="peek-label">圖層</span><b class="peek-layer" id="peek-layer">即時</b>
+      <svg class="peek-chevron" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    </button>
+    <div class="controls-body" id="controls-body" inert>
+    <div class="controls-inner">
     <div class="control-title">圖層</div>
     <div id="layers" role="radiogroup" aria-label="圖層">
       <button type="button" role="radio" data-value="now" aria-checked="true">即時</button>
@@ -98,6 +105,8 @@
       </div>
     </div>
     </details>
+    </div>
+    </div>
 
     <div class="legend card-legend" id="legend" aria-label="圖例"></div>
   </aside>

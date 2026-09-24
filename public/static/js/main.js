@@ -2,7 +2,7 @@
 import { getJSON } from "./api.js";
 import { loadECharts } from "./charts.js";
 import { dayLabel, escapeHtml, hhmm, num } from "./format.js";
-import { GlassSelect, Segmented, prefersReducedMotion, refract, revealInline, setSky, springEasing } from "./glass.js";
+import { GlassSelect, Segmented, prefersReducedMotion, refract, refractNow, revealInline, setSky, springEasing } from "./glass.js";
 import { createGlobe } from "./globe.js";
 import { renderFreshness } from "./header.js";
 import { RegionView } from "./panel.js";
@@ -335,8 +335,56 @@ $("fallback").addEventListener("click", (event) => {
 });
 
 // ---------- controls ----------
+// The controls card stays folded to its header and legend, and unfolds while
+// the pointer is over it (or the keyboard is in it, or one of its menus is
+// open). Without hover (touch), the header opens and closes it.
+const controls = document.querySelector(".controls");
+const canHover = matchMedia("(hover: hover)").matches;
+let closeTimer = 0;
+let morphTimer = 0;
+function setControlsOpen(open) {
+  if (controls.classList.contains("open") === open) return;
+  // Mid-morph the glass keeps its blur but not its refraction, whose map is
+  // made for one size; it is rebuilt once, at the new size.
+  controls.classList.add("morphing");
+  controls.classList.toggle("open", open);
+  $("controls-peek").setAttribute("aria-expanded", String(open));
+  $("controls-body").inert = !open;
+  clearTimeout(morphTimer);
+  morphTimer = setTimeout(async () => {
+    await refractNow(controls);
+    controls.classList.remove("morphing");
+  }, prefersReducedMotion() ? 0 : 650);
+}
+// Kept open while a keyboard user is in it or one of its menus is open (a
+// menu sits on <body>, so the pointer leaves the card to use it).
+const controlsBusy = () => Boolean(controls.querySelector(":focus-visible, .gselect.open"));
+function closeControlsSoon() {
+  clearTimeout(closeTimer);
+  closeTimer = setTimeout(() => (controlsBusy() ? closeControlsSoon() : setControlsOpen(false)), 350);
+}
+if (canHover) {
+  controls.addEventListener("pointerenter", () => {
+    clearTimeout(closeTimer);
+    setControlsOpen(true);
+  });
+  controls.addEventListener("pointerleave", closeControlsSoon);
+}
+controls.addEventListener("focusin", () => {
+  if (controls.querySelector(":focus-visible")) setControlsOpen(true);
+});
+controls.addEventListener("focusout", (event) => {
+  if (!controls.contains(event.relatedTarget)) closeControlsSoon();
+});
+$("controls-peek").addEventListener("click", () => setControlsOpen(canHover || !controls.classList.contains("open")));
+document.addEventListener("pointerdown", (event) => {
+  if (canHover || !controls.classList.contains("open")) return;
+  if (!controls.contains(event.target) && !event.target.closest?.(".gselect-menu")) setControlsOpen(false);
+});
+
 new Segmented($("layers"), {
-  onChange: (layer) => {
+  onChange: (layer, button) => {
+    $("peek-layer").textContent = button.textContent;
     state.layer = layer;
     syncStepper();
     loadLayer().catch(showError);

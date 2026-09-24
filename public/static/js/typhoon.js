@@ -142,12 +142,17 @@ export class TyphoonCard {
     $(".ty-class").textContent = cls.name;
     $(".ty-when").innerHTML = `<b>${when(p.at ?? this.line.now + hours * HOUR)}</b><span>${relative(hours)}</span>`;
     // At the latest fix the button is a live marker; anywhere else it brings you back.
+    // Rewritten only when it switches: a fresh icon under the pointer would
+    // restart its hover spin on every step of playback.
     const live = $(".ty-live");
     const atNow = hours === 0;
-    live.classList.toggle("is-live", atNow);
-    live.disabled = atNow;
-    live.innerHTML = atNow ? "<i></i>現在" : `${RETURN}回到現在`;
-    live.setAttribute("aria-label", atNow ? "目前顯示最新定位" : "回到最新定位");
+    if (live.dataset.state !== String(atNow)) {
+      live.dataset.state = String(atNow);
+      live.classList.toggle("is-live", atNow);
+      live.disabled = atNow;
+      live.innerHTML = atNow ? "<i></i>現在" : `${RETURN}回到現在`;
+      live.setAttribute("aria-label", atNow ? "目前顯示最新定位" : "回到最新定位");
+    }
     const level = beaufortLevel(p.wind);
     const stat = (label, value, unit, note = "", extra = "") =>
       `<div${extra}><small>${label}</small><b>${value}${unit ? `<small>${unit}</small>` : ""}</b><em>${note}</em></div>`;

@@ -161,7 +161,7 @@ function build(element) {
   const version = (entry.version ?? 0) + 1;
   entry.version = version;
   const maps = glassMaps(width, height, radius, bezel);
-  Promise.all([maps.displacement, maps.specular].map(blobUrl)).then(([displacement, specular]) => {
+  return Promise.all([maps.displacement, maps.specular].map(blobUrl)).then(([displacement, specular]) => {
     if (entry.version !== version || !element.isConnected) {
       URL.revokeObjectURL(displacement);
       URL.revokeObjectURL(specular);
@@ -195,7 +195,8 @@ function schedule(element) {
   // Wait for layout to settle (panels resize as their content loads).
   frame = setTimeout(() => {
     frame = 0;
-    for (const item of pending) if (item.isConnected) build(item);
+    // An element mid-morph is rebuilt by refractNow() once it has its final size.
+    for (const item of pending) if (item.isConnected && !item.classList.contains("morphing")) build(item);
     pending.clear();
   }, 120);
 }
@@ -217,6 +218,14 @@ export function refract(root = document) {
     observer.observe(element);
     schedule(element);
   }
+}
+
+/** Rebuild one element's refraction for its size now; resolves once it is applied. */
+export async function refractNow(element) {
+  const entry = registry.get(element);
+  if (!refractionEnabled || !entry) return;
+  entry.width = 0;
+  await build(element);
 }
 
 /** Rebuild after a style change that alters blur (the sky tint does). */

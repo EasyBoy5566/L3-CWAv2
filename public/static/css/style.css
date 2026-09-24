@@ -356,10 +356,49 @@ input[type="range"]::-moz-range-thumb {
   overflow-y: auto;
   scrollbar-width: none;
   display: grid;
-  gap: 12px;
-  padding: 16px;
+  gap: 0;
+  padding: 12px 14px 14px;
 }
 .controls::-webkit-scrollbar { display: none; }
+/* Folded: the header and the legend. Unfolded (hover, keyboard, or a tap on
+   touch screens; main.js): the layer switch, county, map layers and 3D slide
+   out between them on the soft spring. */
+.controls-peek {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 2px 10px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.peek-icon { width: 16px; height: 16px; flex: none; color: var(--accent); }
+.peek-label { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--muted); }
+.peek-layer { font-size: 14px; font-weight: 700; }
+.peek-chevron { width: 10px; height: 6px; margin-left: auto; color: var(--muted); transition: transform 0.4s var(--ease); }
+.controls.open .peek-chevron { transform: rotate(180deg); }
+@media (hover: none) { .controls-peek { cursor: pointer; } }
+.controls-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 0.6s var(--spring-soft), opacity 0.25s ease;
+}
+.controls.open .controls-body { grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows 0.6s var(--spring-soft), opacity 0.35s ease 0.08s; }
+.controls-inner { display: grid; gap: 12px; min-height: 0; overflow: hidden; padding: 2px 2px 14px; }
+.controls .card-legend { margin-top: 2px; }
+/* While it unfolds or folds, blur alone: the refraction map fits one size. */
+.controls.morphing {
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(190%) brightness(1.06) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(190%) brightness(1.06) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .controls-body, .controls.open .controls-body { transition: none; }
+}
 .control-title { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--muted); }
 .controls .field { display: grid; gap: 8px; }
 .controls select { width: 100%; }
