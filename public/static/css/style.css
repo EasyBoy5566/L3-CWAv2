@@ -1275,7 +1275,7 @@ body.sim-mode .bar-slot .ticker { opacity: 0; translate: 0 -10px; visibility: hi
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 9px;
+  justify-content: center;
   min-width: 0;
   min-height: 32px;
   padding: 3px 12px;
@@ -1286,13 +1286,12 @@ body.sim-mode .bar-slot .ticker { opacity: 0; translate: 0 -10px; visibility: hi
   font: inherit;
   font-size: 13px;
   line-height: 1.35;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   transition: background 0.2s;
 }
 .ticker-item:hover { background: rgba(255, 255, 255, 0.08); }
 .ticker-item:disabled { cursor: default; background: none; }
-.ticker-mark { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--mark, rgba(226, 232, 240, 0.6)); box-shadow: 0 0 8px var(--mark, transparent); }
 .ticker-text { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 
 /* ---------- folded cards: a one-line header ---------- */

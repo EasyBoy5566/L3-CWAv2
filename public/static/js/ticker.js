@@ -4,9 +4,6 @@
 import { escapeHtml } from "./format.js";
 
 const ROTATE_MS = 6000;
-// CWA's alert colours, and ours by level for the derived ones.
-const COLORS = { 黃色: "#facc15", 橙色: "#fb923c", 紅色: "#ef4444" };
-const BY_LEVEL = ["rgba(226, 232, 240, 0.7)", "#7dd3fc", "#fb923c", "#ef4444"];
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
 export class Ticker {
@@ -20,6 +17,8 @@ export class Ticker {
     root.innerHTML = `
       <button type="button" class="ticker-item" aria-live="polite"></button>`;
     this.item = root.querySelector(".ticker-item");
+    this.item.innerHTML = `<span class="ticker-text">正在整理天氣提醒…</span>`;
+    this.item.disabled = true;
     this.item.addEventListener("click", () => {
       const alert = this.alerts[this.index];
       if (alert) this.onPick?.(alert);
@@ -57,11 +56,8 @@ export class Ticker {
 
   show(animate) {
     const alert = this.alerts[this.index];
-    const color = COLORS[alert?.color] ?? BY_LEVEL[alert?.level ?? 0] ?? BY_LEVEL[0];
-    const html = alert
-      // The sentence names the alert; the dot's colour is its level (CWA's own colour for its alerts).
-      ? `<i class="ticker-mark" style="--mark:${color}"></i><span class="ticker-text">${escapeHtml(alert.text)}</span>`
-      : `<i class="ticker-mark"></i><span class="ticker-text">目前沒有特別的天氣提醒</span>`;
+    // The sentence alone, centred: it names the alert and where and when.
+    const html = `<span class="ticker-text">${escapeHtml(alert?.text ?? "目前沒有特別的天氣提醒")}</span>`;
     this.item.title = alert ? [alert.text, alert.detail].filter(Boolean).join("\n") : "";
     this.item.disabled = !alert;
     if (!animate || reducedMotion.matches) {
