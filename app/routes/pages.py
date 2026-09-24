@@ -5,6 +5,7 @@ from flask import Blueprint, abort, make_response, render_template, request
 
 from app import config
 from app.routes import county_from_path
+from app.queries import counties as county_points
 from etl.counties import COUNTIES
 
 bp = Blueprint("pages", __name__)
@@ -14,6 +15,7 @@ def _page(template: str, **context):
     response = make_response(render_template(
         template,
         counties=list(COUNTIES),
+        county_points=county_points(),
         cesium_token=config.cesium_ion_token(),
         **context,
     ))

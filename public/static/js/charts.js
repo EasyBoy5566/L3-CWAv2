@@ -2,6 +2,27 @@
 // with the panel, so opening county after county does not leak canvases.
 /* global echarts */
 
+const ECHARTS_URL = "/static/vendor/echarts-5.6.0/echarts.min.js";
+let echartsLoading = null;
+
+/** ECharts is a megabyte of script used only by the panel's chart, so it loads on first need. */
+export function loadECharts() {
+  if (window.echarts) return Promise.resolve();
+  echartsLoading ??= new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = ECHARTS_URL;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => {
+      echartsLoading = null; // let a later panel try again
+      script.remove();
+      reject(new Error("圖表程式庫載入失敗"));
+    };
+    document.head.append(script);
+  });
+  return echartsLoading;
+}
+
 const TEXT = "rgba(226, 232, 240, 0.75)";
 const GRID_LINE = "rgba(255, 255, 255, 0.08)";
 

@@ -12,6 +12,10 @@ from app.errors import WeatherError
 
 # Do not retry CWA on every request while it is still publishing the next slot.
 RETRY_AFTER_MINUTES = 2
+# CWA publishes a slot every ten minutes and lists it 15-20 minutes late, so
+# right after a successful fetch the newest reading can already look stale.
+# Fetching again before the next slot could exist only makes the visitor wait.
+FETCHED_WITHIN_MINUTES = 10
 
 
 def _minutes_since(value: str | None, now: datetime) -> float | None:
@@ -69,13 +73,16 @@ def status(database) -> dict:
 def refresh_observations_if_stale(database) -> bool:
     """Fetch observations inline when they are stale. Never raises; returns whether it ran."""
     now = config.now()
-    rows = database.query("SELECT dataTime, lastAttemptAt FROM JobStatus WHERE job = 'observations'")
+    rows = database.query("SELECT dataTime, lastAttemptAt, lastSuccessAt FROM JobStatus WHERE job = 'observations'")
     if rows:
         age = _minutes_since(rows[0]["dataTime"], now)
         since_attempt = _minutes_since(rows[0]["lastAttemptAt"], now)
+        since_success = _minutes_since(rows[0]["lastSuccessAt"], now)
         if age is not None and age <= config.OBSERVATION_REFRESH_AFTER:
             return False
         if since_attempt is not None and since_attempt < RETRY_AFTER_MINUTES:
+            return False
+        if since_success is not None and since_success < FETCHED_WITHIN_MINUTES:
             return False
     from etl.jobs import run_job
 

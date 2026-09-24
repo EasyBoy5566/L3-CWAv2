@@ -1,6 +1,17 @@
+// Requests the page started from <head>, before any module loaded (see
+// index.html). Each is handed out once; later calls fetch afresh.
+export function earlyFetch(url, options) {
+  const early = window.__early?.[url];
+  if (early) {
+    delete window.__early[url];
+    return early;
+  }
+  return fetch(url, options);
+}
+
 // Fetch JSON from this site's API. Errors carry the server's message.
 export async function getJSON(url, { signal } = {}) {
-  const response = await fetch(url, { signal, headers: { Accept: "application/json" } });
+  const response = await earlyFetch(url, { signal });
   let body = null;
   try {
     body = await response.json();

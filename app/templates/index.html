@@ -1,7 +1,25 @@
 {% extends "base.html" %}
 {% block body_class %}page-globe{% endblock %}
 {% block head %}
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Widgets/widgets.css">
+  {# Start every connection and download the first view needs while the page parses. #}
+  <link rel="preconnect" href="https://api.cesium.com" crossorigin>
+  <link rel="preconnect" href="https://assets.ion.cesium.com" crossorigin>
+  <link rel="preconnect" href="https://dev.virtualearth.net" crossorigin>
+  <link rel="preload" as="script" href="{{ url_for('static', filename='vendor/cesium-1.145.0/Cesium.js') }}">
+  {# The first view's data, requested before Cesium (1.6 MB) has even arrived;
+     api.js earlyFetch() hands each response to its first caller. A preload
+     link would not do: Chrome will not reuse a preloaded max-age=0 response. #}
+  <script>
+    window.__early = {};
+    for (const url of ["/api/meta", "/api/map?layer=now", "{{ url_for('static', filename='geo/taiwan-counties.json') }}"]) {
+      window.__early[url] = fetch(url);
+      window.__early[url].catch(() => {});
+    }
+  </script>
+  {% for module in ["main", "api", "format", "glass", "globe", "header", "panel", "town-data", "scale", "bubbles", "geo", "overlays", "charts", "icons"] %}
+  <link rel="modulepreload" href="{{ url_for('static', filename='js/' ~ module ~ '.js') }}">
+  {% endfor %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/cesium-1.145.0/Widgets/widgets.css') }}">
 {% endblock %}
 {% block topbar_tools %}
   <div class="tools" role="toolbar" aria-label="日期、時間與檢視">
@@ -92,9 +110,12 @@
   </section>
 
   <footer class="credit">資料：中央氣象署開放資料 · 縣市界：內政部國土測繪中心</footer>
+  {# The globe needs the county anchors before /api/meta answers. #}
+  <script id="county-points" type="application/json">{{ county_points | tojson }}</script>
 </main>
 {% endblock %}
 {% block scripts %}
-  <script src="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Cesium.js"></script>
+  {# Served from this site (scripts/vendor_libs.py): a public CDN failing here stalled the whole page. #}
+  <script src="{{ url_for('static', filename='vendor/cesium-1.145.0/Cesium.js') }}"></script>
   <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
 {% endblock %}

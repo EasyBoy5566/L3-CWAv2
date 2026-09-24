@@ -3,7 +3,7 @@
 // temperature and rain chart, the week, and a grid of detail tiles. The
 // globe's side panel and the standalone /region?name=<縣市> page share it.
 import { getJSON, regionUrl } from "./api.js";
-import { ChartSet, hourlyOption } from "./charts.js";
+import { ChartSet, hourlyOption, loadECharts } from "./charts.js";
 import { escapeHtml, hhmm, moonPhase, moonSvg, num, todayInTaipei, windText } from "./format.js";
 import { refract } from "./glass.js";
 import { GLYPH, SUNRISE, SUNSET, kindFromCode, kindFromText, weatherIcon } from "./icons.js";
@@ -356,7 +356,12 @@ export class RegionView {
         ${title("chart", "溫度與降雨", `<span class="keys">${key("#fdba74", "溫度")}${key("#fef08a", "體感", true)}${key("#7dd3fc", "降雨機率")}</span>`)}
         <div class="chart"></div>`;
     }
-    this.charts.make(element.querySelector(".chart"), hourlyOption(hourly));
+    const chart = element.querySelector(".chart");
+    loadECharts().then(() => {
+      if (chart.isConnected) this.charts.make(chart, hourlyOption(hourly));
+    }).catch((error) => {
+      chart.innerHTML = `<p class="note">${escapeHtml(error.message)}</p>`;
+    });
   }
 
   renderWeek({ week, current }) {

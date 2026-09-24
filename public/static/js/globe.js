@@ -64,14 +64,35 @@ function imagery(token) {
   );
 }
 
-async function canvasLayer(viewer, canvas, bounds, index) {
-  const provider = await Cesium.SingleTileImageryProvider.fromUrl(canvas.toDataURL("image/png"), {
+// A canvas draped as imagery. Handing Cesium the canvas itself skips the PNG
+// round trip (toDataURL then decode), which took a few hundred milliseconds
+// per 4096-pixel raster. SingleTileImageryProvider returns `_image` without
+// loading its url once it is set, as fromUrl() itself does (Cesium 1.145).
+function canvasLayer(viewer, canvas, bounds, index) {
+  const provider = new Cesium.SingleTileImageryProvider({
+    url: "data:,",
+    tileWidth: canvas.width,
+    tileHeight: canvas.height,
     rectangle: Cesium.Rectangle.fromDegrees(bounds.west, bounds.south, bounds.east, bounds.north),
   });
+  provider._image = canvas;
   return viewer.imageryLayers.addImageryProvider(provider, index);
 }
 
+// Resolves when the browser has a spare moment, so deferred work does not
+// compete with the first frames.
+const idle = () => new Promise((resolve) => {
+  if (window.requestIdleCallback) requestIdleCallback(() => resolve(), { timeout: 1000 });
+  else setTimeout(resolve, 100);
+});
+
+// The loading card lifts when the first view's tiles are in, or after this
+// long: the rest stream in and sharpen while the page is already usable.
+const FIRST_VIEW_MS = 2500;
+
 export async function createGlobe(element, { token, counties: countyList, onHover, onInfo, onSelect }) {
+  // The county geometry downloads while Cesium sets up.
+  const countiesLoading = loadCounties();
   if (token) Cesium.Ion.defaultAccessToken = token;
   const terrain = token ? Cesium.Terrain.fromWorldTerrain({ requestVertexNormals: true }) : undefined;
   const options = {
@@ -110,31 +131,91 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   viewer.clock.currentTime = Cesium.JulianDate.now();
   viewer.clock.clockStep = Cesium.ClockStep.SYSTEM_CLOCK;
 
+  // ---------- camera ----------
+  const flyHome = (duration = 1.5) => {
+    if (scene.mode === Cesium.SceneMode.SCENE2D) {
+      viewer.camera.flyTo({ destination: Cesium.Rectangle.fromDegrees(...TAIWAN_2D), duration });
+      return;
+    }
+    viewer.camera.flyToBoundingSphere(
+      new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(HOME.lon, HOME.lat), 1),
+      {
+        offset: new Cesium.HeadingPitchRange(Cesium.Math.toRadians(HOME.heading), Cesium.Math.toRadians(HOME.pitch), HOME.range),
+        duration,
+      },
+    );
+  };
+  // Aim at Taiwan first, so the first tiles requested are Taiwan's, not the whole globe's.
+  flyHome(0);
+
+  // tilesLoaded is also true before the first tile is even requested, so it
+  // counts only once the load queue has been busy.
+  let tilesRequested = false;
+  const watchQueue = (length) => {
+    if (length > 0) tilesRequested = true;
+  };
+  scene.globe.tileLoadProgressEvent.addEventListener(watchQueue);
+  const firstTiles = new Promise((resolve) => {
+    const done = () => {
+      scene.postRender.removeEventListener(check);
+      scene.globe.tileLoadProgressEvent.removeEventListener(watchQueue);
+      resolve();
+    };
+    const check = () => {
+      if (tilesRequested && scene.globe.tilesLoaded) done();
+    };
+    scene.postRender.addEventListener(check);
+    setTimeout(done, FIRST_VIEW_MS);
+    scene.requestRender();
+  });
+
   // ---------- county geometry, borders and highlights ----------
-  const counties = await loadCounties();
+  const counties = await countiesLoading;
+  let sky = "night";
   // A single image has no mipmaps, so one border raster either aliases into
   // dashes from afar or blurs up close. Two rasters, swapped by camera height.
-  const bordersFine = await canvasLayer(viewer, bordersCanvas(counties, 4096), BOUNDS);
-  const bordersCoarse = await canvasLayer(viewer, bordersCanvas(counties, 1400, 0.8), BOUNDS);
-  // Township lines go beneath the county lines (index 1: just above the imagery).
-  const towns = await loadTowns();
-  const townBorders = await canvasLayer(viewer, townBordersCanvas(towns), BOUNDS, 1);
-  const overlays = [bordersFine, bordersCoarse, townBorders];
+  // Only the coarse one is needed for the first, distant view; the fine one
+  // and the township lines are drawn after it (see `details` below).
+  const bordersCoarse = canvasLayer(viewer, bordersCanvas(counties, 1400, 0.8), BOUNDS);
+  let bordersFine = null;
+  let townBorders = null;
+  let towns = [];
+  const overlays = [bordersCoarse];
   const townLevel = () => viewer.camera.positionCartographic.height < TOWN_LEVEL;
   const pickBorders = () => {
     const far = viewer.camera.positionCartographic.height > BORDER_SWITCH;
-    if (bordersCoarse.show !== far) {
-      bordersCoarse.show = far;
-      bordersFine.show = !far;
-    }
-    townBorders.show = townLevel();
+    bordersCoarse.show = far || !bordersFine;
+    if (bordersFine) bordersFine.show = !far;
+    if (townBorders) townBorders.show = townLevel();
   };
-  bordersFine.show = false;
   viewer.camera.changed.addEventListener(pickBorders);
   viewer.camera.percentageChanged = 0.1;
+  const addBorders = (canvas, index) => {
+    const layer = canvasLayer(viewer, canvas, BOUNDS, index);
+    layer.brightness = OVERLAY_BRIGHTNESS[sky];
+    overlays.push(layer);
+    return layer;
+  };
+  // After the first view: the fine county lines, then the townships, which
+  // are needed only close in (below TOWN_LEVEL) and for township links.
+  const details = (async () => {
+    await firstTiles;
+    await idle();
+    // In the coarse raster's slot, so highlights added since stay on top.
+    bordersFine = addBorders(bordersCanvas(counties, 4096), viewer.imageryLayers.indexOf(bordersCoarse));
+    pickBorders();
+    const loaded = await loadTowns();
+    await idle();
+    // Township lines go beneath the county lines (index 1: just above the imagery).
+    townBorders = addBorders(townBordersCanvas(loaded), 1);
+    towns = loaded;
+    pickBorders();
+    scene.requestRender();
+  })();
+  details.catch((error) => console.warn("township borders unavailable", error));
+
   const highlights = new Map(); // name → Promise<ImageryLayer>
   const highlightLayers = [];
-  let sky = "night";
 
   const built = new Map(); // name → ImageryLayer, once its raster exists
   const highlightLayer = (name) => {
@@ -142,7 +223,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       const feature = counties.find((c) => c.name === name) ?? towns.find((t) => t.name === name);
       highlights.set(name, (async () => {
         const { canvas, bounds } = highlightCanvas(feature);
-        const layer = await canvasLayer(viewer, canvas, bounds);
+        const layer = canvasLayer(viewer, canvas, bounds);
         layer.brightness = HIGHLIGHT_BRIGHTNESS[sky];
         highlightLayers.push(layer);
         built.set(name, layer);
@@ -188,7 +269,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       console.warn("terrain heights unavailable", error);
     }
   };
-  if (terrain) terrain.readyEvent.addEventListener(liftBubbles);
+  if (terrain) terrain.readyEvent.addEventListener((provider) => firstTiles.then(idle).then(() => liftBubbles(provider)));
 
   const dataLayers = new Overlays(viewer);
 
@@ -256,21 +337,6 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     if (county) onSelect?.(county, { x: click.position.x, y: click.position.y }, town);
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
-  // ---------- camera ----------
-  const flyHome = (duration = 1.5) => {
-    if (scene.mode === Cesium.SceneMode.SCENE2D) {
-      viewer.camera.flyTo({ destination: Cesium.Rectangle.fromDegrees(...TAIWAN_2D), duration });
-      return;
-    }
-    viewer.camera.flyToBoundingSphere(
-      new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(HOME.lon, HOME.lat), 1),
-      {
-        offset: new Cesium.HeadingPitchRange(Cesium.Math.toRadians(HOME.heading), Cesium.Math.toRadians(HOME.pitch), HOME.range),
-        duration,
-      },
-    );
-  };
-  flyHome(0);
   pickBorders();
 
   if (token) {
@@ -329,21 +395,11 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     scene.requestRender();
   });
 
-  const firstTiles = new Promise((resolve) => {
-    const started = performance.now();
-    const check = () => {
-      if (scene.globe.tilesLoaded || performance.now() - started > 10000) {
-        scene.postRender.removeEventListener(check);
-        resolve();
-      }
-    };
-    scene.postRender.addEventListener(check);
-    scene.requestRender();
-  });
-
   return {
     viewer,
     ready: firstTiles,
+    // Township geometry arrives after the first view; links to a township wait on it.
+    townsReady: details,
     hasTerrain: Boolean(token),
 
     setValues(layer, values, scale) {

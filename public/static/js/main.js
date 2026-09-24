@@ -1,5 +1,6 @@
 // The globe page: layers, dates, the county panel, the sun clock and polling.
 import { getJSON } from "./api.js";
+import { loadECharts } from "./charts.js";
 import { dayLabel, escapeHtml, hhmm, num } from "./format.js";
 import { GlassSelect, Segmented, prefersReducedMotion, refract, setSky } from "./glass.js";
 import { createGlobe } from "./globe.js";
@@ -56,6 +57,11 @@ async function loadLayer() {
   const query = state.layer === "now" ? "layer=now" : `layer=${state.layer}&date=${state.date ?? ""}`;
   const data = await getJSON(`/api/map?${query}`);
   state.values = data.values;
+  applyLayer();
+}
+
+// Values may arrive before the globe exists; it takes them when it does.
+function applyLayer() {
   const scale = scaleFor(state.layer);
   renderLegend($("legend"), scale);
   state.globe?.setValues(state.layer, state.values, scale);
@@ -476,21 +482,25 @@ async function poll() {
 }
 
 // ---------- start ----------
+// Nothing on the way to the first view waits on anything else: the data
+// requests, the county geometry and Cesium all start together, and what is
+// needed only later (township lines, the township forecast, the chart
+// library) follows once the map is on screen.
 async function start() {
   syncSliderToNow();
   refract();
-  try {
-    state.dataStamp = await loadMeta();
-  } catch (error) {
-    showError(error);
-  }
+  const metaLoaded = loadMeta().then((stamp) => {
+    state.dataStamp = stamp;
+    renderFallbackTiles();
+  }).catch(showError);
+  const layerLoaded = loadLayer().catch(showError);
 
   const token = document.body.dataset.cesiumToken;
   try {
     if (!window.Cesium) throw new Error("Cesium 載入失敗");
     state.globe = await createGlobe($("globe"), {
       token,
-      counties: state.meta?.counties ?? [],
+      counties: JSON.parse($("county-points").textContent),
       onHover: showHover,
       onInfo: showInfo,
       onSelect: (name, position, town) => openRegion(name, { origin: position, town }),
@@ -509,19 +519,27 @@ async function start() {
     document.querySelector(".topbar .tools").hidden = true;
   }
 
-  try {
-    await loadLayer();
-  } catch (error) {
-    showError(error);
-  }
+  applyLayer();
 
-  // The township forecast is small and makes hovering townships informative.
-  townData.load("townships").catch(() => {});
   const initial = new URLSearchParams(location.search).get("region");
-  if (initial) openRegion(initial, { push: false, town: townFromUrl(initial) });
+  if (initial) {
+    openRegion(initial, { push: false });
+    // A township link opens the county at once and the township when its geometry is in.
+    if (new URLSearchParams(location.search).get("town")) {
+      state.globe?.townsReady.then(() => {
+        const town = townFromUrl(initial);
+        if (town && state.region === initial) openRegion(initial, { push: false, town });
+      });
+    }
+  }
 
   await (state.globe?.ready ?? Promise.resolve());
   $("loading").classList.add("done");
+  await Promise.all([metaLoaded, layerLoaded]);
+
+  // After the first view: the township forecast (for hovering townships) and the chart library.
+  townData.load("townships").catch(() => {});
+  (window.requestIdleCallback ?? setTimeout)(() => loadECharts().catch(() => {}));
 
   setInterval(poll, POLL_MS);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });

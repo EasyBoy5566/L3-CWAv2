@@ -14,7 +14,12 @@ def test_pages_render(client, loaded, monkeypatch):
     monkeypatch.setenv("CESIUM_ION_TOKEN", "browser-token")
     page = client.get("/")
     assert page.status_code == 200
-    assert "cesium@1.145.0" in page.text and 'data-cesium-token="browser-token"' in page.text
+    assert 'data-cesium-token="browser-token"' in page.text
+    # Cesium is served from this site, and the file the page names is there.
+    assert "/static/vendor/cesium-1.145.0/Cesium.js" in page.text
+    assert client.get("/static/vendor/cesium-1.145.0/Cesium.js").status_code == 200
+    # The county anchors ride in the page, so the globe need not wait for /api/meta.
+    assert '<script id="county-points" type="application/json">' in page.text and "24.753707" in page.text
     assert "s-maxage" in page.headers["Cache-Control"]
     assert client.get(f"/region/{TAICHUNG}").status_code == 200
     missing = client.get("/region/Atlantis")

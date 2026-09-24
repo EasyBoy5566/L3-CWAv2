@@ -6,11 +6,13 @@
 // exaggerated the mountains rise out of those volumes, so borders vanished
 // along the Central Range. Imagery follows the rendered surface exactly.
 
+import { earlyFetch } from "./api.js";
+
 // Covers Matsu to the Hengchun peninsula and Kinmen to Lanyu.
 export const BOUNDS = { west: 118.1, east: 122.1, south: 21.8, north: 26.4 };
 
 export async function loadCounties(url = "/static/geo/taiwan-counties.json") {
-  const geojson = await (await fetch(url)).json();
+  const geojson = await (await earlyFetch(url)).json();
   return geojson.features.map((feature) => {
     const polygons = feature.geometry.coordinates;
     let west = Infinity; let east = -Infinity; let south = Infinity; let north = -Infinity;
