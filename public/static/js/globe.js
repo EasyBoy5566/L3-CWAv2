@@ -80,6 +80,13 @@ function canvasLayer(viewer, canvas, bounds, index) {
   return viewer.imageryLayers.addImageryProvider(provider, index);
 }
 
+function haversine(lon1, lat1, lon2, lat2) {
+  const rad = Math.PI / 180;
+  const a = Math.sin(((lat2 - lat1) * rad) / 2) ** 2
+    + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(((lon2 - lon1) * rad) / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(a));
+}
+
 // Resolves when the browser has a spare moment, so deferred work does not
 // compete with the first frames.
 const idle = () => new Promise((resolve) => {
@@ -91,7 +98,7 @@ const idle = () => new Promise((resolve) => {
 // long: the rest stream in and sharpen while the page is already usable.
 const FIRST_VIEW_MS = 2500;
 
-export async function createGlobe(element, { token, counties: countyList, onHover, onInfo, onSelect }) {
+export async function createGlobe(element, { token, counties: countyList, onHover, onInfo, onSelect, onMode, onTyphoon }) {
   // The county geometry downloads while Cesium sets up.
   const countiesLoading = loadCounties();
   if (token) Cesium.Ion.defaultAccessToken = token;
@@ -215,6 +222,11 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   })();
   details.catch((error) => console.warn("township borders unavailable", error));
 
+  // Every eighth vertex of each county's outer rings: about a kilometre apart,
+  // plenty for "the typhoon is 850 km from Taiwan".
+  const coast = counties.flatMap((county) => county.polygons.flatMap((polygon) =>
+    polygon[0].filter((_, i) => i % 8 === 0).map(([lon, lat]) => [lon, lat, county.name])));
+
   const highlights = new Map(); // name → Promise<ImageryLayer>
   const highlightLayers = [];
 
@@ -333,7 +345,11 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     onHover?.(null);
   });
   handler.setInputAction((click) => {
-    if (dataLayers.infoFor(scene.pick(click.position))) return; // the typhoon has no county
+    const hit = dataLayers.hit(scene.pick(click.position));
+    if (hit) {
+      if (hit.cyclone !== undefined) onTyphoon?.(hit.cyclone);
+      return; // the typhoon has no county
+    }
     const { county, town } = placeAt(click.position);
     if (county) onSelect?.(county, { x: click.position.x, y: click.position.y }, town);
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
@@ -352,28 +368,52 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       if (Math.abs(target - current) > 0.005) {
         scene.verticalExaggeration = current + (target - current) * 0.25;
         scene.requestRender();
+      } else if (current !== target) {
+        scene.verticalExaggeration = target;
+        scene.requestRender();
       }
+      updateBuildings();
     });
   }
 
   // ---------- buildings and the shadow simulation ----------
   let buildings = null;
+  let buildingsWanted = false;
   let simulating = false;
+  let mode2D = false;
+  // The buildings are drawn (and so load their tiles) only in 3D, close in,
+  // at true scale. Tiles loaded while the terrain was still exaggerated kept
+  // that stretch after the camera came down, and building models cannot be
+  // projected into 2D at all: rendering stopped with an error.
+  const updateBuildings = () => {
+    if (!buildings) return;
+    const show = buildingsWanted && !mode2D
+      && viewer.camera.positionCartographic.height < TRUE_SCALE_BELOW
+      && scene.verticalExaggeration === 1;
+    if (buildings.show !== show) {
+      buildings.show = show;
+      scene.requestRender();
+    }
+  };
+  viewer.camera.changed.addEventListener(updateBuildings);
   const setBuildings = async (on) => {
     if (!token) throw new Error("建築模型需要 Cesium ion token。");
+    buildingsWanted = on;
     if (on && !buildings) {
       buildings = await Cesium.createOsmBuildingsAsync();
       // One pale material reads as architecture rather than a map legend.
       buildings.style = new Cesium.Cesium3DTileStyle({ color: "color('#e8edf4', 1.0)" });
       buildings.shadows = Cesium.ShadowMode.ENABLED;
+      buildings.show = false;
       scene.primitives.add(buildings);
     }
-    if (buildings) buildings.show = on;
+    updateBuildings();
     scene.requestRender();
   };
   const applyShadows = () => {
-    viewer.shadows = simulating;
-    viewer.terrainShadows = simulating ? Cesium.ShadowMode.RECEIVE_ONLY : Cesium.ShadowMode.DISABLED;
+    const on = simulating && !mode2D;
+    viewer.shadows = on;
+    viewer.terrainShadows = on ? Cesium.ShadowMode.RECEIVE_ONLY : Cesium.ShadowMode.DISABLED;
     // Close up, a short shadow distance keeps building shadows crisp.
     viewer.shadowMap.maximumDistance = simulating ? 6000 : 20000;
     viewer.shadowMap.darkness = simulating ? 0.35 : 0.3;
@@ -408,12 +448,34 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     setOverlay: (name, on) => dataLayers.set(name, on),
     refreshOverlays: () => dataLayers.refresh(),
 
+    typhoons: () => dataLayers.typhoons(),
+    /** Show a marker for cyclone `index` at an interpolated point, or hide it with null. */
+    scrubTyphoon: (index, point) => dataLayers.scrub(index, point),
+    /** Taiwan and the whole track of cyclone `index` in one view. */
+    frameTyphoon: (index) => dataLayers.frameCyclone(index),
+    flyToTyphoon(lon, lat) {
+      viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(lon, lat), 1), {
+        offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-58), 2600000),
+        duration: 1.8,
+      });
+    },
+    /** Great-circle distance in km from a point to Taiwan's nearest coast, and that county. */
+    distanceToTaiwan(lon, lat) {
+      let best = { km: Infinity, county: null };
+      for (const [pLon, pLat, county] of coast) {
+        const km = haversine(lon, lat, pLon, pLat);
+        if (km < best.km) best = { km, county };
+      }
+      return best;
+    },
+
     town: (county, name) => towns.find((t) => t.county === county && t.town === name) ?? null,
 
     setBuildings,
 
-    /** Buildings on, and the camera low over a tall skyline. */
+    /** Buildings on, and the camera low over a tall skyline (in 3D: buildings have no 2D form). */
     async showCity(city = "taipei") {
+      if (mode2D) await this.setMode2D(false);
       await setBuildings(true);
       const spot = SHADOW_CITIES[city] ?? SHADOW_CITIES.taipei;
       viewer.camera.flyToBoundingSphere(
@@ -507,6 +569,11 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     async setMode2D(on) {
       if (switching || (on === (scene.mode === Cesium.SceneMode.SCENE2D))) return;
       switching = true;
+      // Buildings and their shadows leave before the morph renders a frame.
+      mode2D = on;
+      updateBuildings();
+      applyShadows();
+      onMode?.(on);
       const layers = [element, bubbles.layer];
       const motion = !matchMedia("(prefers-reduced-motion: reduce)").matches;
       const fade = (keyframes, duration) => Promise.all(layers.map((layer) =>

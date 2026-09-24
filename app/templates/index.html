@@ -16,7 +16,7 @@
       window.__early[url].catch(() => {});
     }
   </script>
-  {% for module in ["main", "api", "format", "glass", "globe", "header", "panel", "town-data", "scale", "bubbles", "geo", "overlays", "charts", "icons"] %}
+  {% for module in ["main", "api", "format", "glass", "globe", "header", "panel", "town-data", "scale", "bubbles", "geo", "overlays", "cyclone", "typhoon", "charts", "icons"] %}
   <link rel="modulepreload" href="{{ url_for('static', filename='js/' ~ module ~ '.js') }}">
   {% endfor %}
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/cesium-1.145.0/Widgets/widgets.css') }}">
@@ -101,6 +101,8 @@
 
     <div class="legend card-legend" id="legend" aria-label="圖例"></div>
   </aside>
+
+  <section id="typhoon-card" class="typhoon-card glass" data-refract="36" aria-label="颱風資訊" hidden></section>
 
   <div id="hover" class="hover-card glass" hidden></div>
 

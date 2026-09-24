@@ -7,6 +7,7 @@ import { createGlobe } from "./globe.js";
 import { renderFreshness } from "./header.js";
 import { RegionView } from "./panel.js";
 import { SECTIONS, TownData } from "./town-data.js";
+import { TyphoonCard } from "./typhoon.js";
 import { MISSING, colorAt, renderLegend, scaleFor } from "./scale.js";
 
 const POLL_MS = 3 * 60 * 1000;
@@ -18,6 +19,14 @@ const menus = {
   date: new GlassSelect($("date")),
 };
 const townData = new TownData();
+// Closing the card turns the typhoon layer off, as the switch would.
+const typhoonCard = new TyphoonCard($("typhoon-card"), {
+  onClose: () => {
+    const input = document.querySelector('input[data-overlay="typhoon"]');
+    input.checked = false;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  },
+});
 
 const setCounty = (value) => {
   $("county").value = value;
@@ -243,12 +252,14 @@ $("overlays").addEventListener("change", async (event) => {
   if (!input.checked) {
     await state.globe.setOverlay(name, false);
     setOverlayStatus(name, "");
+    if (name === "typhoon") typhoonCard.hide();
     return;
   }
   setOverlayStatus(name, "載入中…", { busy: true });
   try {
     const status = await state.globe.setOverlay(name, true);
     if (input.checked) setOverlayStatus(name, status);
+    if (input.checked && name === "typhoon") typhoonCard.show(state.globe.typhoons());
   } catch (error) {
     input.checked = false;
     setOverlayStatus(name, error.message, { error: true });
@@ -432,15 +443,20 @@ $("clock-now").addEventListener("click", () => {
   syncSliderToNow();
   state.globe?.setTime(null);
 });
+// The button offers the other mode. The globe reports every switch, including
+// the ones it makes itself (a building preset returns to 3D).
+function syncModeButton(on) {
+  const button = $("mode");
+  button.setAttribute("aria-pressed", String(on));
+  button.textContent = on ? "3D" : "2D";
+  button.setAttribute("aria-label", on ? "切換到 3D" : "切換到 2D");
+}
+
 $("mode").addEventListener("click", async (event) => {
   const button = event.currentTarget;
   if (!state.globe || button.disabled) return;
   const on = button.getAttribute("aria-pressed") !== "true";
-  // The button offers the other mode, and waits out the dissolve.
-  button.disabled = true;
-  button.setAttribute("aria-pressed", String(on));
-  button.textContent = on ? "3D" : "2D";
-  button.setAttribute("aria-label", on ? "切換到 3D" : "切換到 2D");
+  button.disabled = true; // waits out the dissolve
   try {
     await state.globe.setMode2D(on);
   } finally {
@@ -470,6 +486,7 @@ async function poll() {
     if (state.globe) {
       const statuses = await state.globe.refreshOverlays();
       for (const [name, status] of Object.entries(statuses)) setOverlayStatus(name, status);
+      if ("typhoon" in statuses) typhoonCard.show(state.globe.typhoons());
     }
   } catch (error) {
     showError(error);
@@ -499,7 +516,10 @@ async function start() {
       onHover: showHover,
       onInfo: showInfo,
       onSelect: (name, position, town) => openRegion(name, { origin: position, town }),
+      onMode: syncModeButton,
+      onTyphoon: (index) => typhoonCard.focus(index),
     });
+    typhoonCard.globe = state.globe;
     document.querySelector(".credit").hidden = true;
     state.globe.setSky(document.body.dataset.sky);
     if (!state.globe.hasTerrain) {

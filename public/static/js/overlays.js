@@ -4,19 +4,21 @@
 // (town-data.js). The typhoon is the one dataset that belongs on the map.
 /* global Cesium */
 import { getJSON } from "./api.js";
-import { escapeHtml, hhmm } from "./format.js";
+import { beaufortLevel, cycloneClass, directionName } from "./cyclone.js";
 
 const color = (css, alpha = 1) => Cesium.Color.fromCssColorString(css).withAlpha(alpha);
 const num = (value, digits = 1, unit = "") => (value === null || value === undefined ? "—" : `${Number(value).toFixed(digits)}${unit}`);
+// "2026-09-24T14:00:00+08:00" → "9/24 14:00", in the timestamp's own (Taipei) time.
+const dayTime = (iso) => `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))} ${iso.slice(11, 16)}`;
 
 // Layer definitions: what each draws, and what its hover card says.
 const DEFINITIONS = {
   typhoon: {
     animated: true,
-    build(source, data) {
+    build(source, data, owner) {
       if (!data.cyclones.length) return "目前沒有活動中的颱風";
-      for (const cyclone of data.cyclones) buildCyclone(source, cyclone);
-      return data.cyclones.map((c) => c.name).join("、");
+      data.cyclones.forEach((cyclone, index) => buildCyclone(source, cyclone, index, owner));
+      return data.cyclones.map((c) => `${c.name} · ${cycloneClass(c.track.at(-1).wind).name}`).join("、");
     },
     info: (row) => row,
     fly: true,
@@ -93,94 +95,197 @@ function hull(points) {
   return [...lower.slice(0, -1), ...upper.slice(0, -1)];
 }
 
-function buildCyclone(source, cyclone) {
-  const now = cyclone.track.at(-1);
-  const info = {
-    title: `${cyclone.name ?? ""}${cyclone.nameEn ? ` ${cyclone.nameEn}` : ""}`,
-    sub: `颱風 · ${hhmm(now.time)} 定位`,
-    lines: [["中心氣壓", num(now.pressure, 0, " hPa")], ["最大風速", num(now.wind, 0, " m/s")], ["瞬間陣風", num(now.gust, 0, " m/s")],
-      ["七級風暴風半徑", num(now.r15, 0, " km")], ["動向", escapeHtml(now.moving ?? "—")]],
+// The typhoon symbol: a ring with two trailing arms, in the colour of its class.
+const symbols = new Map();
+function symbolImage(css) {
+  if (symbols.has(css)) return symbols.get(css);
+  const size = 72;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const context = canvas.getContext("2d");
+  context.translate(size / 2, size / 2);
+  context.lineCap = "round";
+  for (const [stroke, width] of [["rgba(11, 18, 32, 0.85)", 10], [css, 5]]) {
+    context.strokeStyle = stroke;
+    context.lineWidth = width;
+    context.beginPath();
+    context.arc(0, 0, 10, 0, Math.PI * 2);
+    context.stroke();
+    for (const s of [1, -1]) {
+      context.beginPath();
+      context.moveTo(0, -10 * s);
+      context.quadraticCurveTo(19 * s, -10 * s, 25 * s, -25 * s);
+      context.stroke();
+    }
+  }
+  symbols.set(css, canvas);
+  return canvas;
+}
+
+// What the hover card says about one analysed or forecast position.
+function fixInfo(cyclone, p, forecast) {
+  const cls = cycloneClass(p.wind);
+  const level = beaufortLevel(p.wind);
+  const lines = [
+    ["中心氣壓", num(p.pressure, 0, " hPa")],
+    ["最大風速", `${num(p.wind, 0, " m/s")}${level === null ? "" : `（${level} 級）`}`],
+    ["七級風暴半徑", num(p.r15, 0, " km")],
+  ];
+  if (p.r25) lines.push(["十級風暴半徑", num(p.r25, 0, " km")]);
+  if (forecast) lines.push(["70% 機率半徑", num(p.r70, 0, " km")]);
+  else if (p.dir) lines.push(["移動", `向${directionName(p.dir)} ${num(p.speed, 0, " km/h")}`]);
+  return {
+    title: `${cyclone.name ?? ""} · ${cls.name}`,
+    sub: forecast ? `預報 +${p.hour} 小時 · ${dayTime(p.time)}` : `${dayTime(p.time)} 定位`,
+    lines,
   };
+}
+
+function buildCyclone(source, cyclone, index, owner) {
+  const now = cyclone.track.at(-1);
+  const nowClass = cycloneClass(now.wind);
+  const properties = (row) => ({ overlay: "typhoon", cyclone: index, row });
+  const started = performance.now();
+  // Cyclones in the northern hemisphere turn anticlockwise; positive is anticlockwise here.
+  const spin = (rate) => new Cesium.CallbackProperty(() => ((performance.now() - started) / 1000) * rate, false);
 
   // The cone: the hull of each forecast point's 70% probability circle.
-  const conePoints = [[now.lon, now.lat]];
-  for (const f of cyclone.forecast) conePoints.push(...circle(f.lon, f.lat, f.r70 ?? 0));
   if (cyclone.forecast.length) {
+    const conePoints = [[now.lon, now.lat]];
+    for (const f of cyclone.forecast) conePoints.push(...circle(f.lon, f.lat, f.r70 ?? 0));
     source.entities.add({
       polygon: {
         hierarchy: Cesium.Cartesian3.fromDegreesArray(hull(conePoints).flat()),
-        material: color("#e2e8f0", 0.14),
+        material: color("#e2e8f0", 0.09),
         outline: true,
-        outlineColor: color("#e2e8f0", 0.5),
+        outlineColor: color("#e2e8f0", 0.45),
         height: 0,
       },
-      properties: { overlay: "typhoon", row: info },
+      properties: properties(fixInfo(cyclone, now, false)),
     });
   }
-  // Past track, glowing; forecast track, dashed.
-  source.entities.add({
-    polyline: {
-      positions: Cesium.Cartesian3.fromDegreesArray(cyclone.track.flatMap((p) => [p.lon, p.lat])),
-      width: 5,
-      material: new Cesium.PolylineGlowMaterialProperty({ color: color("#f9a8d4"), glowPower: 0.25 }),
-    },
-  });
-  if (cyclone.forecast.length) {
+
+  // The past track glows, each leg in the colour of the class it reached.
+  for (let i = 1; i < cyclone.track.length; i += 1) {
+    const a = cyclone.track[i - 1];
+    const b = cyclone.track[i];
     source.entities.add({
       polyline: {
-        positions: Cesium.Cartesian3.fromDegreesArray([now, ...cyclone.forecast].flatMap((p) => [p.lon, p.lat])),
-        width: 2.5,
-        material: new Cesium.PolylineDashMaterialProperty({ color: color("#fbcfe8", 0.95), dashLength: 14 }),
+        positions: Cesium.Cartesian3.fromDegreesArray([a.lon, a.lat, b.lon, b.lat]),
+        width: 7,
+        material: new Cesium.PolylineGlowMaterialProperty({ color: color(cycloneClass(b.wind).color), glowPower: 0.22, taperPower: 1 }),
+      },
+    });
+  }
+  for (const fix of cyclone.track.slice(0, -1)) {
+    source.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(fix.lon, fix.lat),
+      point: { pixelSize: 7, color: color(cycloneClass(fix.wind).color), outlineColor: color("#0b1220", 0.85), outlineWidth: 2 },
+      properties: properties(fixInfo(cyclone, fix, false)),
+    });
+  }
+
+  // The forecast: dashed legs and labelled points, coloured the same way.
+  const chain = [now, ...cyclone.forecast];
+  for (let i = 1; i < chain.length; i += 1) {
+    const a = chain[i - 1];
+    const b = chain[i];
+    source.entities.add({
+      polyline: {
+        positions: Cesium.Cartesian3.fromDegreesArray([a.lon, a.lat, b.lon, b.lat]),
+        width: 3,
+        material: new Cesium.PolylineDashMaterialProperty({ color: color(cycloneClass(b.wind).color, 0.95), gapColor: Cesium.Color.TRANSPARENT, dashLength: 16 }),
       },
     });
   }
   for (const f of cyclone.forecast) {
     source.entities.add({
       position: Cesium.Cartesian3.fromDegrees(f.lon, f.lat),
-      point: { pixelSize: 6, color: color("#fbcfe8"), outlineColor: color("#831843"), outlineWidth: 1 },
+      point: { pixelSize: 9, color: color(cycloneClass(f.wind).color), outlineColor: Cesium.Color.WHITE, outlineWidth: 2 },
       label: {
         text: `+${f.hour}h`, font: "600 11px 'Noto Sans TC', sans-serif", fillColor: Cesium.Color.WHITE,
         outlineColor: color("#0b1220"), outlineWidth: 3, style: Cesium.LabelStyle.FILL_AND_OUTLINE,
         pixelOffset: new Cesium.Cartesian2(10, 0), horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
       },
-      properties: {
-        overlay: "typhoon",
-        row: { title: `${cyclone.name} 預報 +${f.hour} 小時`, sub: hhmm(f.time), lines: [["中心氣壓", num(f.pressure, 0, " hPa")], ["最大風速", num(f.wind, 0, " m/s")], ["70% 機率半徑", num(f.r70, 0, " km")]] },
-      },
+      properties: properties(fixInfo(cyclone, f, true)),
     });
   }
-  // The gale radius on the sea, and a rotating cloud spiral floating above it.
+
+  // Now: the gale (7級) and storm (10級) circles on the sea, the cloud
+  // spiral above them, and the symbol with the name.
+  const info = fixInfo(cyclone, now, false);
   if (now.r15) {
     source.entities.add({
       position: Cesium.Cartesian3.fromDegrees(now.lon, now.lat),
       ellipse: {
         semiMajorAxis: now.r15 * 1000, semiMinorAxis: now.r15 * 1000, height: 0,
-        material: color("#f87171", 0.12), outline: true, outlineColor: color("#f87171", 0.7),
+        material: color("#fb923c", 0.13), outline: true, outlineColor: color("#fdba74", 0.85),
       },
-      properties: { overlay: "typhoon", row: info },
+      properties: properties(info),
+    });
+  }
+  if (now.r25) {
+    source.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(now.lon, now.lat),
+      ellipse: {
+        semiMajorAxis: now.r25 * 1000, semiMinorAxis: now.r25 * 1000, height: 0,
+        material: color("#ef4444", 0.2), outline: true, outlineColor: color("#fca5a5", 0.9),
+      },
+      properties: properties(info),
     });
   }
   const radius = Math.max(now.r15 ?? 0, 180) * 1200;
-  const started = performance.now();
   source.entities.add({
     position: Cesium.Cartesian3.fromDegrees(now.lon, now.lat),
     ellipse: {
       semiMajorAxis: radius, semiMinorAxis: radius, height: 12000,
       material: new Cesium.ImageMaterialProperty({ image: spiralImage(), transparent: true }),
-      // Cyclones in the northern hemisphere turn anticlockwise.
-      stRotation: new Cesium.CallbackProperty(() => ((performance.now() - started) / 1000) * 0.6, false),
+      stRotation: spin(0.6),
     },
-    properties: { overlay: "typhoon", row: info },
+    properties: properties(info),
   });
   source.entities.add({
     position: Cesium.Cartesian3.fromDegrees(now.lon, now.lat, 12000),
-    label: {
-      text: `${cyclone.name}\n${num(now.pressure, 0, " hPa")} · ${num(now.wind, 0, " m/s")}`,
-      font: "600 13px 'Noto Sans TC', sans-serif", fillColor: Cesium.Color.WHITE, showBackground: true,
-      backgroundColor: color("#0b1220", 0.55), backgroundPadding: new Cesium.Cartesian2(10, 6),
-      pixelOffset: new Cesium.Cartesian2(0, -48), disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    billboard: {
+      image: symbolImage(nowClass.color), scale: 0.75, rotation: spin(1.4),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
     },
-    properties: { overlay: "typhoon", row: info },
+    label: {
+      text: `${cyclone.name ?? ""}  ${nowClass.name}\n${num(now.pressure, 0, " hPa")} · ${num(now.wind, 0, " m/s")}`,
+      font: "600 13px 'Noto Sans TC', sans-serif", fillColor: Cesium.Color.WHITE, showBackground: true,
+      backgroundColor: color("#0b1220", 0.6), backgroundPadding: new Cesium.Cartesian2(10, 6),
+      // Up and to the right: typhoons here mostly come from the east-south-east
+      // and head north-west, so that corner is clear of both tracks.
+      pixelOffset: new Cesium.Cartesian2(26, -24), horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM, disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+    properties: properties(info),
+  });
+
+  // The card's timeline marker: wherever the slider says the cyclone is.
+  const ghost = () => owner.ghosts.get(index);
+  source.entities.add({
+    position: new Cesium.CallbackProperty(() => {
+      const g = ghost();
+      return g ? Cesium.Cartesian3.fromDegrees(g.lon, g.lat, 12000) : Cesium.Cartesian3.fromDegrees(now.lon, now.lat, 12000);
+    }, false),
+    billboard: {
+      image: new Cesium.CallbackProperty(() => symbolImage(cycloneClass(ghost()?.wind).color), false),
+      show: new Cesium.CallbackProperty(() => Boolean(ghost()), false),
+      scale: 0.75, rotation: spin(1.4), disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+  });
+  source.entities.add({
+    position: new Cesium.CallbackProperty(() => {
+      const g = ghost();
+      return g ? Cesium.Cartesian3.fromDegrees(g.lon, g.lat) : Cesium.Cartesian3.fromDegrees(now.lon, now.lat);
+    }, false),
+    ellipse: {
+      semiMajorAxis: new Cesium.CallbackProperty(() => Math.max(ghost()?.r15 ?? 1, 1) * 1000, false),
+      semiMinorAxis: new Cesium.CallbackProperty(() => Math.max(ghost()?.r15 ?? 1, 1) * 1000, false),
+      show: new Cesium.CallbackProperty(() => Boolean(ghost()?.r15), false),
+      height: 0, material: color("#fb923c", 0.1), outline: true, outlineColor: color("#fdba74", 0.75),
+    },
   });
 }
 
@@ -189,8 +294,9 @@ function buildCyclone(source, cyclone) {
 export class Overlays {
   constructor(viewer) {
     this.viewer = viewer;
-    this.active = new Map(); // name → { source, status }
+    this.active = new Map(); // name → { source, status, data }
     this.pending = new Map();
+    this.ghosts = new Map(); // cyclone index → the timeline marker's point
   }
 
   isOn(name) {
@@ -206,6 +312,7 @@ export class Overlays {
       const layer = this.active.get(name);
       if (layer) this.viewer.dataSources.remove(layer.source, true);
       this.active.delete(name);
+      if (name === "typhoon") this.ghosts.clear();
       this.updateAnimation();
       this.viewer.scene.requestRender();
       return "";
@@ -215,11 +322,11 @@ export class Overlays {
     const data = await getJSON(`/api/overlays/${name}`);
     if (this.pending.get(name) !== token) return ""; // switched off while loading
     const source = new Cesium.CustomDataSource(name);
-    const status = definition.build(source, data);
+    const status = definition.build(source, data, this);
     const previous = this.active.get(name);
     await this.viewer.dataSources.add(source);
     if (previous) this.viewer.dataSources.remove(previous.source, true);
-    this.active.set(name, { source, status });
+    this.active.set(name, { source, status, data });
     this.updateAnimation();
     if (definition.fly && !previous) this.frame(definition.points?.(data) ?? []);
     this.viewer.scene.requestRender();
@@ -256,6 +363,31 @@ export class Overlays {
   updateAnimation() {
     const animated = [...this.active.keys()].some((name) => DEFINITIONS[name].animated);
     this.viewer.scene.requestRenderMode = !animated;
+  }
+
+  /** The active cyclones, as /api/overlays/typhoon gave them. */
+  typhoons() {
+    return this.active.get("typhoon")?.data.cyclones ?? [];
+  }
+
+  /** Put cyclone `index`'s timeline marker at `point` ({lon, lat, wind, r15}), or hide it. */
+  scrub(index, point) {
+    if (point) this.ghosts.set(index, point);
+    else this.ghosts.delete(index);
+    this.viewer.scene.requestRender();
+  }
+
+  frameCyclone(index) {
+    const cyclone = this.typhoons()[index];
+    if (cyclone) this.frame([...cyclone.track, ...cyclone.forecast].map((p) => [p.lon, p.lat]));
+  }
+
+  /** Which overlay (and cyclone) a pick landed on, or null. */
+  hit(picked) {
+    const properties = picked?.id?.properties;
+    const name = properties?.overlay?.getValue?.();
+    if (!name || !DEFINITIONS[name]) return null;
+    return { name, cyclone: properties.cyclone?.getValue?.() };
   }
 
   /** The hover card for a picked overlay entity, or null. */

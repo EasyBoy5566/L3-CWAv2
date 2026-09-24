@@ -99,7 +99,12 @@ def _fix(fix: dict) -> dict | None:
         "wind": number(fix.get("MaxWindSpeed"), 0, 150),
         "gust": number(fix.get("MaxGustSpeed"), 0, 200),
         "pressure": number(fix.get("Pressure"), 850, 1100),
+        # Gale (7級, 15 m/s) and storm (10級, 25 m/s) radii in km; the latter only for stronger storms.
         "r15": number((fix.get("Circle15ms") or {}).get("Radius"), 0, 2000),
+        "r25": number((fix.get("Circle25ms") or {}).get("Radius"), 0, 2000),
+        # Movement: km/h, and a 16-point compass code such as "WNW".
+        "speed": number(fix.get("MovingSpeed"), 0, 200),
+        "dir": text(fix.get("MovingDirection")),
     }
 
 

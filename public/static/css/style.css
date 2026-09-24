@@ -929,3 +929,67 @@ body.page-region { background: transparent; }
 .town-table td:first-child { color: var(--text); }
 .town-table td.t { color: var(--text); font-weight: 600; }
 .town-table tr:last-child td { border-bottom: 0; }
+
+/* ---------- typhoon card: floating at the bottom, between the controls and the panel ---------- */
+.typhoon-card {
+  position: absolute;
+  z-index: 12;
+  bottom: 16px;
+  left: calc((296px + 100vw - 12px) / 2);
+  width: min(620px, calc(100vw - 332px));
+  transform: translateX(-50%);
+  --radius: 26px;
+  --ty: #fb923c;
+  display: grid;
+  gap: 10px;
+  padding: 14px 18px 14px;
+  animation: town-in 0.4s var(--ease);
+  transition: left 0.5s var(--ease), width 0.5s var(--ease);
+}
+.typhoon-card[hidden] { display: none; }
+.panel-open .typhoon-card {
+  left: calc((296px + 100vw - var(--panel-w) - 24px) / 2);
+  width: min(620px, calc(100vw - var(--panel-w) - 344px));
+}
+.ty-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ty-symbol { flex: none; width: 32px; height: 32px; color: var(--ty); filter: drop-shadow(0 0 6px var(--ty)); animation: ty-spin 3s linear infinite; }
+@keyframes ty-spin { to { transform: rotate(-360deg); } }
+.ty-title { display: grid; min-width: 0; }
+.ty-title b { font-size: 18px; font-weight: 700; letter-spacing: 0.04em; }
+.ty-title span { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.ty-class { font-size: 13px; font-weight: 700; color: var(--ty); white-space: nowrap; }
+.ty-tabs { display: flex; gap: 4px; margin-left: 6px; }
+.ty-tabs .chip { padding: 3px 10px; font-size: 12px; }
+.ty-tabs .chip.on { background: rgba(255, 255, 255, 0.22); }
+.ty-close { margin-left: auto; font-size: 20px; }
+.ty-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px 10px; }
+.ty-stats > div { display: grid; gap: 1px; min-width: 0; }
+.ty-stats small { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.ty-stats b { font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ty-stats b small { margin-left: 3px; }
+.ty-stats em { font-style: normal; font-size: 11px; color: var(--faint); white-space: nowrap; }
+.ty-near { display: flex; flex-wrap: wrap; gap: 2px 0; margin: 0; font-size: 12.5px; color: rgba(255, 255, 255, 0.8); line-height: 1.5; }
+.ty-near > span { white-space: nowrap; }
+.ty-near b { color: var(--text); font-variant-numeric: tabular-nums; }
+.ty-near b.alert { color: #fca5a5; }
+.ty-near .sep { margin: 0 8px; color: var(--faint); }
+.ty-time { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+.ty-scale { position: relative; padding-bottom: 14px; }
+.ty-range { width: 100%; display: block; }
+/* Past track solid, forecast faint: not the sun clock's day gradient. */
+.typhoon-card input.ty-range::-webkit-slider-runnable-track { background: var(--track); }
+.typhoon-card input.ty-range::-moz-range-track { background: var(--track); }
+.ty-ticks { position: absolute; left: 11px; right: 11px; top: 50%; height: 0; pointer-events: none; }
+.ty-scale .ty-ticks { top: calc(50% - 7px); }
+.ty-ticks i { position: absolute; top: -2px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--c); box-shadow: 0 0 4px var(--c); }
+.ty-ticks i.f { box-shadow: none; opacity: 0.75; }
+.ty-now-mark { position: absolute; top: 12px; transform: translateX(-50%); font-size: 10.5px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.ty-when { display: grid; justify-items: end; min-width: 92px; font-variant-numeric: tabular-nums; }
+.ty-when b { font-size: 14px; font-weight: 600; }
+.ty-when span { font-size: 11px; color: var(--muted); }
+.ty-actions { display: flex; gap: 6px; }
+.ty-actions .chip { padding: 5px 12px; font-size: 12px; }
+.ty-actions .chip:disabled { opacity: 0.4; cursor: default; }
+@media (max-width: 1100px) {
+  .ty-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

@@ -16,7 +16,7 @@ const PRIORITY = ["臺北市", "新北市", "宜蘭縣", "桃園市", "臺中市
 const FAR = 260000; // camera height in metres above which names are shortened
 const GAP = 4;
 // Floating chrome that bubbles must not slide underneath.
-const OBSTACLES = ".topbar, .controls, .panel:not([hidden])";
+const OBSTACLES = ".topbar, .controls, .panel:not([hidden]), .typhoon-card:not([hidden])";
 
 function shortNames(names) {
   const stems = names.map((name) => name.replace(/[市縣]$/, ""));

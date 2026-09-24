@@ -43,6 +43,11 @@ def test_typhoon_track_and_forecast(samples):
     assert cyclone["track"] == sorted(cyclone["track"], key=lambda p: p["time"])
     first = cyclone["forecast"][0]
     assert first["r70"] == 40 and first["time"] == "2026-09-24T08:00:00+08:00"
+    assert first["dir"] == "WNW" and first["speed"] == 19
+    now = cyclone["track"][-1]
+    assert now["r15"] == 100 and now["dir"] == "WNW" and now["speed"] == 34
+    # The storm radius appears once the forecast strengthens it.
+    assert any(f["r25"] == 50 for f in cyclone["forecast"])
 
 
 def test_no_active_typhoon_is_an_empty_list():
