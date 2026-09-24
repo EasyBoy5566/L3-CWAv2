@@ -1,11 +1,15 @@
-// Liquid glass: refraction, the liquid segmented control, and the sky tint.
+// Liquid glass: refraction, the pointer light, the liquid segmented control,
+// and the sky tint.
 //
-// Refraction: every element marked [data-refract] gets its own SVG filter.
-// A canvas draws a displacement map for the element's exact size and corner
-// radius: flat (no shift) in the middle, bending the backdrop toward the
-// centre inside a bezel along the edges, the way a thick lens does. The
-// filter is applied with `backdrop-filter: url(#id) blur() saturate()`,
-// which only Chromium supports; elsewhere the CSS blur alone remains.
+// Refraction: every element marked [data-refract] gets its own SVG filter,
+// applied with `backdrop-filter: url(#id) blur() saturate()` (Chromium only;
+// elsewhere the CSS blur alone remains). The glass is modelled as a slab
+// whose edge rounds over in a squircle bezel. For each pixel of the bezel the
+// surface slope gives, by Snell's law (n = 1.5), how far a ray from behind is
+// bent; that becomes a displacement map. Red, green and blue are displaced by
+// slightly different amounts, so the rim splits light a little the way thick
+// glass does, and a second map adds the specular rim: bright where the bezel
+// faces the light (top left), fainter on the opposite edge.
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
@@ -36,16 +40,43 @@ function roundedRectDistance(px, py, w, h, r) {
   return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
 }
 
-function displacementMap(width, height, radius, bezel) {
+const IOR = 1.5;
+// The bezel's height profile: a squircle, 0 at the rim rising to 1 inside.
+const squircle = (x) => (1 - (1 - x) ** 4) ** 0.25;
+// How far a vertical ray is bent where the bezel is at x (0 rim → 1 flat),
+// relative to the most it is bent anywhere, from Snell's law.
+const bend = (() => {
+  const samples = 128;
+  const values = [];
+  for (let i = 0; i <= samples; i += 1) {
+    const x = Math.min(Math.max(i / samples, 0.001), 0.999);
+    const slope = (squircle(x + 0.001) - squircle(x - 0.001)) / 0.002;
+    const incidence = Math.atan(slope);
+    const refracted = Math.asin(Math.sin(incidence) / IOR);
+    values.push(Math.tan(incidence - refracted) * (1 - squircle(x) * 0.6));
+  }
+  const max = Math.max(...values);
+  return (x) => values[Math.round(Math.min(Math.max(x, 0), 1) * samples)] / max;
+})();
+const LIGHT = [-0.62, -0.78]; // from the top left
+
+// The displacement map (red x, green y) and the specular map (white, alpha
+// the highlight) for a w×h rounded rectangle.
+function glassMaps(width, height, radius, bezel) {
   const scale = 0.5; // half resolution is plenty; feImage stretches it back
   const cw = Math.max(2, Math.ceil(width * scale));
   const ch = Math.max(2, Math.ceil(height * scale));
-  const canvas = document.createElement("canvas");
-  canvas.width = cw;
-  canvas.height = ch;
-  const context = canvas.getContext("2d");
-  const image = context.createImageData(cw, ch);
-  const data = image.data;
+  const make = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = cw;
+    canvas.height = ch;
+    const context = canvas.getContext("2d");
+    return { canvas, context, image: context.createImageData(cw, ch) };
+  };
+  const shift = make();
+  const shine = make();
+  const d = shift.image.data;
+  const l = shine.image.data;
   const eps = 0.75;
   for (let y = 0; y < ch; y += 1) {
     for (let x = 0; x < cw; x += 1) {
@@ -54,27 +85,35 @@ function displacementMap(width, height, radius, bezel) {
       const inside = -roundedRectDistance(px, py, width, height, radius);
       let dx = 0;
       let dy = 0;
+      let highlight = 0;
       if (inside > 0 && inside < bezel) {
         // Outward normal from the distance field's gradient.
         const gx = roundedRectDistance(px + eps, py, width, height, radius) - roundedRectDistance(px - eps, py, width, height, radius);
         const gy = roundedRectDistance(px, py + eps, width, height, radius) - roundedRectDistance(px, py - eps, width, height, radius);
         const length = Math.hypot(gx, gy) || 1;
-        // A convex (squircle-like) profile: strongest right at the rim.
-        const t = 1 - inside / bezel;
-        const strength = t * t * (3 - 2 * t);
-        // Sample from further inside, so content near the rim is pulled outward.
-        dx = -(gx / length) * strength;
-        dy = -(gy / length) * strength;
+        const nx = gx / length;
+        const ny = gy / length;
+        const t = inside / bezel;
+        const strength = bend(t);
+        // Sample from further inside: the rim magnifies what lies under the glass.
+        dx = -nx * strength;
+        dy = -ny * strength;
+        const facing = nx * LIGHT[0] + ny * LIGHT[1];
+        const rim = (1 - t) ** 2.4;
+        highlight = rim * (Math.max(facing, 0) ** 1.4 + 0.4 * Math.max(-facing, 0) ** 1.6);
       }
       const i = (y * cw + x) * 4;
-      data[i] = 128 + dx * 127;
-      data[i + 1] = 128 + dy * 127;
-      data[i + 2] = 128;
-      data[i + 3] = 255;
+      d[i] = 128 + dx * 127;
+      d[i + 1] = 128 + dy * 127;
+      d[i + 2] = 128;
+      d[i + 3] = 255;
+      l[i] = l[i + 1] = l[i + 2] = 255;
+      l[i + 3] = Math.min(255, highlight * 235);
     }
   }
-  context.putImageData(image, 0, 0);
-  return canvas.toDataURL();
+  shift.context.putImageData(shift.image, 0, 0);
+  shine.context.putImageData(shine.image, 0, 0);
+  return { displacement: shift.canvas.toDataURL(), specular: shine.canvas.toDataURL() };
 }
 
 function build(element) {
@@ -89,8 +128,8 @@ function build(element) {
 
   const style = getComputedStyle(element);
   const radius = Math.min(parseFloat(style.borderTopLeftRadius) || 0, width / 2, height / 2);
-  const bezel = Number(element.dataset.bezel || Math.min(22, Math.max(10, Math.min(width, height) * 0.22)));
-  const strength = Number(element.dataset.refract || 0) || 56;
+  const bezel = Number(element.dataset.bezel || Math.min(30, Math.max(12, Math.min(width, height) * 0.28)));
+  const strength = (Number(element.dataset.refract || 0) || 56) * 1.25;
   const blur = style.getPropertyValue("--glass-blur").trim() || "14px";
 
   let filter = defs.querySelector(`#${entry.id}`);
@@ -100,19 +139,35 @@ function build(element) {
     filter.setAttribute("color-interpolation-filters", "sRGB");
     filter.setAttribute("filterUnits", "userSpaceOnUse");
     filter.setAttribute("primitiveUnits", "userSpaceOnUse");
+    // Each colour is displaced on its own and the three screened back
+    // together; then the specular rim is screened over the result.
+    const channel = (name, matrix) => `
+      <feDisplacementMap in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="G" data-spread="${name}"/>
+      <feColorMatrix type="matrix" values="${matrix}" result="${name}"/>`;
     filter.innerHTML = `
       <feImage result="map" preserveAspectRatio="none" x="0" y="0"/>
-      <feDisplacementMap in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="G"/>`;
+      ${channel("r", "1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0")}
+      ${channel("g", "0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0")}
+      ${channel("b", "0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0")}
+      <feBlend in="r" in2="g" mode="screen" result="rg"/>
+      <feBlend in="rg" in2="b" mode="screen" result="refracted"/>
+      <feImage result="shine" preserveAspectRatio="none" x="0" y="0"/>
+      <feBlend in="shine" in2="refracted" mode="screen"/>`;
     defs.append(filter);
   }
   for (const [name, value] of [["x", 0], ["y", 0], ["width", width], ["height", height]]) filter.setAttribute(name, value);
-  const map = filter.querySelector("feImage");
-  map.setAttribute("width", width);
-  map.setAttribute("height", height);
-  map.setAttribute("href", displacementMap(width, height, radius, bezel));
-  filter.querySelector("feDisplacementMap").setAttribute("scale", strength);
+  const maps = glassMaps(width, height, radius, bezel);
+  const [map, shine] = filter.querySelectorAll("feImage");
+  for (const [image, href] of [[map, maps.displacement], [shine, maps.specular]]) {
+    image.setAttribute("width", width);
+    image.setAttribute("height", height);
+    image.setAttribute("href", href);
+  }
+  // Red bends least and blue most, as in glass; the spread is a few percent.
+  const spread = { r: 0.94, g: 1, b: 1.07 };
+  for (const node of filter.querySelectorAll("feDisplacementMap")) node.setAttribute("scale", strength * spread[node.dataset.spread]);
 
-  const value = `url(#${entry.id}) blur(${blur}) saturate(180%)`;
+  const value = `url(#${entry.id}) blur(${blur}) saturate(190%) brightness(1.06)`;
   element.style.backdropFilter = value;
 }
 
@@ -162,6 +217,43 @@ export function refreshRefraction() {
 }
 
 // ---------------------------------------------------------------------------
+// Pointer light. The glass under the pointer catches it: a soft glow follows
+// the pointer across the surface and the rim lights up nearest to it (the
+// CSS reads --lx, --ly and --light, see .glass::before and ::after).
+
+let lit = null;
+let pointer = null;
+let lightFrame = 0;
+function moveLight() {
+  lightFrame = 0;
+  const glass = pointer?.target instanceof Element ? pointer.target.closest(".glass") : null;
+  if (lit && lit !== glass) lit.style.setProperty("--light", "0");
+  lit = glass;
+  if (!glass) return;
+  const rect = glass.getBoundingClientRect();
+  glass.style.setProperty("--lx", `${pointer.clientX - rect.left}px`);
+  glass.style.setProperty("--ly", `${pointer.clientY - rect.top}px`);
+  glass.style.setProperty("--light", "1");
+}
+if (!reducedMotion.matches && matchMedia("(hover: hover)").matches) {
+  document.addEventListener("pointermove", (event) => {
+    pointer = event;
+    if (!lightFrame) lightFrame = requestAnimationFrame(moveLight);
+  }, { passive: true });
+  document.addEventListener("pointerleave", () => {
+    pointer = null;
+    moveLight();
+  });
+}
+
+// The springs the CSS uses (--spring, --spring-soft), for animations started
+// from script; browsers without linear() easing get a plain ease-out.
+export const springEasing = (name = "spring") => {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(`--${name}`).trim();
+  return value && CSS.supports("transition-timing-function", value) ? value : "cubic-bezier(.3, .7, .2, 1)";
+};
+
+// ---------------------------------------------------------------------------
 // Liquid segmented control. The highlight stretches across the old and new
 // choice, then settles on the new one, like a drop of liquid moving over.
 
@@ -208,9 +300,10 @@ export class Segmented {
     if (!animate || !previous || reducedMotion.matches || previous.y !== next.y) return;
     const left = Math.min(previous.x, next.x);
     const right = Math.max(previous.x + previous.w, next.x + next.w);
+    // Stretch across both choices, squashed like a drop, then spring onto the new one.
     this.pill.animate(
-      [at(previous), { ...at({ x: left, y: next.y, w: right - left, h: next.h }, 0.82), offset: 0.45 }, at(next)],
-      { duration: 460, easing: "cubic-bezier(.3, .7, .2, 1)" },
+      [at(previous), { ...at({ x: left, y: next.y, w: right - left, h: next.h }, 0.78), offset: 0.4 }, at(next)],
+      { duration: 620, easing: springEasing() },
     );
   }
 }
@@ -353,11 +446,10 @@ export class GlassSelect {
     if (!reducedMotion.matches) {
       this.menu.animate(
         [
-          { opacity: 0, transform: "scale(0.9, 0.82)", filter: "blur(4px)" },
-          { opacity: 1, transform: "scale(1.02, 1.03)", filter: "blur(0)", offset: 0.7 },
-          { opacity: 1, transform: "scale(1)" },
+          { opacity: 0, transform: "scale(0.86, 0.74)", filter: "blur(4px)" },
+          { opacity: 1, transform: "scale(1)", filter: "blur(0)" },
         ],
-        { duration: 320, easing: "cubic-bezier(.2, .8, .2, 1)" },
+        { duration: 560, easing: springEasing() },
       );
     }
   }

@@ -2,7 +2,7 @@
 import { getJSON } from "./api.js";
 import { loadECharts } from "./charts.js";
 import { dayLabel, escapeHtml, hhmm, num } from "./format.js";
-import { GlassSelect, Segmented, prefersReducedMotion, refract, setSky } from "./glass.js";
+import { GlassSelect, Segmented, prefersReducedMotion, refract, setSky, springEasing } from "./glass.js";
 import { createGlobe } from "./globe.js";
 import { renderFreshness } from "./header.js";
 import { RegionView } from "./panel.js";
@@ -98,10 +98,10 @@ function revealPanel(origin) {
   const reach = Math.hypot(Math.max(x, rect.width - x), Math.max(y, rect.height - y)) + 40;
   panel.animate(
     [
-      { clipPath: `circle(18px at ${x}px ${y}px)`, opacity: 0.3, transform: "scale(0.97)" },
+      { clipPath: `circle(18px at ${x}px ${y}px)`, opacity: 0.3, transform: "scale(0.92)" },
       { clipPath: `circle(${reach}px at ${x}px ${y}px)`, opacity: 1, transform: "scale(1)" },
     ],
-    { duration: 560, easing: "cubic-bezier(.2, .8, .2, 1)" },
+    { duration: 760, easing: springEasing("spring-soft") },
   );
 }
 

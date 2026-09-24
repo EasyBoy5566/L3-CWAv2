@@ -17,9 +17,9 @@
   --alert: #f87171;
 
   --glass-tint: 14 22 44;
-  --glass-alpha: 0.3;
-  --glass-alpha-strong: 0.56;
-  --glass-blur: 14px;
+  --glass-alpha: 0.16;
+  --glass-alpha-strong: 0.44;
+  --glass-blur: 5px;
   --rim: rgba(255, 255, 255, 0.62);
   --sheen: rgba(255, 255, 255, 0.16);
   --inner: rgba(255, 255, 255, 0.06);
@@ -29,6 +29,10 @@
   --top: 76px;
   --panel-w: min(540px, 40vw);
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Springs, sampled from a damped oscillator: --spring overshoots about 16%
+     (buttons, the segmented pill), --spring-soft about 4% (panels, cards). */
+  --spring: linear(0, 0.032, 0.117, 0.237, 0.376, 0.521, 0.662, 0.791, 0.903, 0.994, 1.065, 1.115, 1.146, 1.161, 1.162, 1.153, 1.137, 1.116, 1.092, 1.069, 1.046, 1.026, 1.01, 0.996, 0.986, 0.979, 0.975, 0.973, 0.974, 0.976, 0.979, 0.983, 0.986, 0.99, 0.994, 0.997, 1);
+  --spring-soft: linear(0, 0.027, 0.096, 0.19, 0.297, 0.408, 0.517, 0.617, 0.707, 0.785, 0.85, 0.904, 0.947, 0.979, 1.003, 1.019, 1.03, 1.036, 1.038, 1.038, 1.036, 1.032, 1.028, 1.024, 1.02, 1.016, 1.012, 1.009, 1.007, 1.004, 1.003, 1.001, 1, 0.999, 0.999, 0.999, 1);
 
   font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
   font-size: 15px;
@@ -37,24 +41,24 @@
 
 body[data-sky="day"] {
   --glass-tint: 26 38 66;
-  --glass-alpha: 0.22;
-  --glass-alpha-strong: 0.5;
-  --glass-blur: 12px;
+  --glass-alpha: 0.14;
+  --glass-alpha-strong: 0.4;
+  --glass-blur: 4px;
   --rim: rgba(255, 255, 255, 0.78);
   --sheen: rgba(255, 255, 255, 0.24);
 }
 body[data-sky="dusk"] {
   --glass-tint: 44 26 52;
-  --glass-alpha: 0.28;
-  --glass-alpha-strong: 0.56;
+  --glass-alpha: 0.16;
+  --glass-alpha-strong: 0.44;
   --rim: rgba(255, 214, 190, 0.7);
   --sheen: rgba(255, 200, 170, 0.18);
 }
 body[data-sky="night"] {
   --glass-tint: 6 10 26;
-  --glass-alpha: 0.36;
-  --glass-alpha-strong: 0.62;
-  --glass-blur: 16px;
+  --glass-alpha: 0.2;
+  --glass-alpha-strong: 0.5;
+  --glass-blur: 6px;
   --rim: rgba(170, 200, 255, 0.5);
   --sheen: rgba(170, 200, 255, 0.12);
 }
@@ -70,33 +74,42 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 [hidden] { display: none !important; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+/* The pointer light (glass.js): 0 → 1 while the pointer is over a surface. */
+@property --light { syntax: "<number>"; inherits: true; initial-value: 0; }
+
 .glass {
+  --light: 0;
   position: relative;
   isolation: isolate;
   border-radius: var(--radius, 24px);
   background: linear-gradient(
     180deg,
-    rgb(var(--glass-tint) / calc(var(--glass-alpha) - 0.06)),
+    rgb(var(--glass-tint) / calc(var(--glass-alpha) - 0.04)),
     rgb(var(--glass-tint) / calc(var(--glass-alpha) + 0.08))
   );
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
-  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(190%) brightness(1.06);
+  backdrop-filter: blur(var(--glass-blur)) saturate(190%) brightness(1.06);
   box-shadow:
-    inset 0 1px 0.5px rgba(255, 255, 255, 0.45),
-    inset 0 -1px 1px rgba(255, 255, 255, 0.1),
-    0 10px 36px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0.5px rgba(255, 255, 255, 0.6),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.16),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.14),
+    inset 0 -22px 34px -26px rgba(255, 255, 255, 0.22),
+    0 12px 40px rgba(0, 0, 0, 0.3),
     0 2px 8px rgba(0, 0, 0, 0.18);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
-  transition: background 0.9s ease, box-shadow 0.9s ease;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  transition: background 0.9s ease, box-shadow 0.9s ease, --light 0.45s ease;
 }
+/* Text-heavy sheets keep more tint and blur, so they stay readable over the map. */
 .glass-strong {
+  --glass-blur: 12px;
   background: linear-gradient(
     180deg,
     rgb(var(--glass-tint) / calc(var(--glass-alpha-strong) - 0.06)),
     rgb(var(--glass-tint) / calc(var(--glass-alpha-strong) + 0.06))
   );
 }
-/* Rim light: a 1px gradient border, brightest where the light hits. */
+/* Rim light: a 1px gradient border, brightest where the light hits, and
+   brighter still nearest the pointer. */
 .glass::before {
   content: "";
   position: absolute;
@@ -105,12 +118,14 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   border-radius: inherit;
   padding: 1px;
   pointer-events: none;
-  background: linear-gradient(135deg, var(--rim), rgba(255, 255, 255, 0.06) 28%, rgba(255, 255, 255, 0) 50%, rgba(255, 255, 255, 0.06) 72%, rgba(255, 255, 255, 0.34));
+  background:
+    radial-gradient(180px circle at var(--lx, 50%) var(--ly, -400px), rgb(255 255 255 / calc(0.95 * var(--light))), transparent 70%),
+    linear-gradient(135deg, var(--rim), rgba(255, 255, 255, 0.08) 28%, rgba(255, 255, 255, 0) 50%, rgba(255, 255, 255, 0.08) 72%, rgba(255, 255, 255, 0.4));
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
 }
-/* Sheen: light pooling at the top of the lens. */
+/* Sheen: light pooling at the top of the lens, and a soft glow under the pointer. */
 .glass::after {
   content: "";
   position: absolute;
@@ -119,8 +134,9 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   border-radius: inherit;
   pointer-events: none;
   background:
+    radial-gradient(260px circle at var(--lx, 50%) var(--ly, -400px), rgb(255 255 255 / calc(0.16 * var(--light))), transparent 70%),
     radial-gradient(140% 70% at 18% -10%, var(--sheen), transparent 55%),
-    radial-gradient(90% 50% at 100% 110%, rgba(255, 255, 255, 0.06), transparent 60%);
+    radial-gradient(90% 50% at 100% 110%, rgba(255, 255, 255, 0.08), transparent 60%);
 }
 
 @media (prefers-reduced-transparency: reduce) {
@@ -943,7 +959,6 @@ body.page-region { background: transparent; }
   display: grid;
   gap: 12px;
   padding: 12px 18px 10px;
-  animation: town-in 0.4s var(--ease);
   transition: left 0.5s var(--ease), width 0.5s var(--ease);
 }
 .typhoon-card[hidden] { display: none; }
@@ -1071,4 +1086,44 @@ body.page-region { background: transparent; }
 }
 @media (prefers-reduced-motion: reduce) {
   .now-btn, .now-btn:hover svg, .now-btn.is-live i { animation: none; }
+}
+
+/* ==========================================================================
+   Motion: everything that moves does so on a spring.
+   ========================================================================== */
+
+/* Buttons swell under the pointer, give when pressed and spring back. */
+.icon-btn, .chip, .now-btn, .ty-play, .gselect-trigger {
+  transition: background 0.2s, border-color 0.2s, color 0.3s, box-shadow 0.3s, transform 0.6s var(--spring);
+}
+.icon-btn:hover, .chip:hover, .now-btn:hover, .ty-play:hover { transform: scale(1.07); }
+.gselect-trigger:hover { transform: scale(1.02); }
+.icon-btn:active, .chip:active, .now-btn:active, .ty-play:active, .gselect-trigger:active {
+  transform: scale(0.9);
+  transition: transform 0.1s ease-out;
+}
+.icon-btn:disabled, .now-btn.is-live { transform: none; }
+
+/* The switch's bead stretches while held, like a drop about to move. */
+.switch-thumb { transition: transform 0.55s var(--spring), width 0.55s var(--spring); }
+.toggle:active .switch-thumb { width: 24px; }
+.toggle:active input:checked + .switch-track .switch-thumb { transform: translateX(10px); }
+
+/* Sheets and cards condense out of the glass: scale up from below and settle. */
+@keyframes liquid-in {
+  from { opacity: 0; scale: 0.88; translate: 0 20px; }
+  35% { opacity: 1; }
+}
+@keyframes liquid-pop {
+  from { opacity: 0; scale: 0.9; }
+}
+.typhoon-card:not([hidden]) { animation: liquid-in 0.75s var(--spring-soft) both; transform-origin: 50% 100%; }
+.hover-card:not([hidden]) { animation: liquid-pop 0.4s var(--spring) both; transform-origin: 0 0; }
+.loading-card { animation: liquid-in 0.8s var(--spring-soft) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn, .chip, .now-btn, .ty-play, .gselect-trigger, .switch-thumb { transition-duration: 0.01s; }
+  .icon-btn:hover, .chip:hover, .now-btn:hover, .ty-play:hover, .gselect-trigger:hover,
+  .icon-btn:active, .chip:active, .now-btn:active, .ty-play:active, .gselect-trigger:active { transform: none; }
+  .typhoon-card:not([hidden]), .hover-card:not([hidden]), .loading-card { animation: none; }
 }
