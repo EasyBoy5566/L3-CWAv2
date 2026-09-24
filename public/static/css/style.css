@@ -680,6 +680,10 @@ body.page-region { background: transparent; }
 
 /* ---------- glass value bubbles over the counties ---------- */
 .bubbles { position: absolute; inset: 0; z-index: 6; pointer-events: none; overflow: hidden; }
+/* A bubble moved off its county points back to it: a hairline and a dot. */
+.bubble-leaders { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.bubble-leaders line { stroke: rgba(255, 255, 255, 0.7); stroke-width: 1.2; stroke-linecap: round; filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.8)); }
+.bubble-leaders circle { fill: #fff; stroke: rgba(8, 12, 28, 0.85); stroke-width: 1.2; }
 .bubble {
   position: absolute;
   left: 0;
@@ -723,6 +727,10 @@ body.page-region { background: transparent; }
 }
 .bubble.selected .name { color: var(--text); }
 .bubble.tucked { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 0.25s ease, visibility 0s 0.25s; }
+/* Far out, where every county has its bubble, they are a size smaller. */
+.bubbles.far .bubble { gap: 5px; padding: 3px 9px 3px 7px; font-size: 11px; }
+.bubbles.far .bubble .value { font-size: 12.5px; }
+.bubbles.far .bubble .dot { width: 8px; height: 8px; }
 
 /* ---------- glass select (glass.js draws it over a hidden <select>) ---------- */
 .gselect-native { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
