@@ -9,8 +9,8 @@
 //
 // The glass is the page's (style.css .glass): a see-through navy tint, a rim
 // brightest at the top left, a sheen and a specular spot along the top, a
-// glow along the bottom. WebGL cannot blur what lies behind a billboard, so
-// the tint does the work of the blur.
+// glow along the bottom. WebGL cannot blur what lies behind a billboard; the
+// tint is kept light so the map shows through, and the text has a dark halo.
 /* global Cesium */
 import { colorAt } from "./scale.js";
 
@@ -57,19 +57,19 @@ function drawSign({ name, text, color, approx, selected }) {
 
   // A soft shadow under the glass, lifting it off the map.
   context.save();
-  context.shadowColor = "rgba(0, 0, 0, 0.45)";
+  context.shadowColor = "rgba(0, 0, 0, 0.3)";
   context.shadowBlur = 7 * s;
   context.shadowOffsetY = 2 * s;
   pill();
-  context.fillStyle = "rgba(8, 12, 26, 0.35)";
+  context.fillStyle = "rgba(8, 12, 26, 0.18)";
   context.fill();
   context.restore();
 
   // The glass: a see-through navy tint, deeper towards the bottom.
   pill();
   const tint = context.createLinearGradient(0, y0, 0, y0 + h);
-  tint.addColorStop(0, "rgba(34, 48, 84, 0.62)");
-  tint.addColorStop(1, "rgba(12, 18, 38, 0.8)");
+  tint.addColorStop(0, "rgba(34, 48, 84, 0.24)");
+  tint.addColorStop(1, "rgba(12, 18, 38, 0.4)");
   context.fillStyle = tint;
   context.fill();
 
@@ -137,12 +137,13 @@ function drawSign({ name, text, color, approx, selected }) {
   context.arc(x + dot / 2, cy, dot / 2, 0, Math.PI * 2);
   context.stroke();
   x += dot + gap;
-  context.shadowColor = "rgba(0, 0, 0, 0.55)";
-  context.shadowBlur = 3 * s;
+  // The glass is clear enough that text needs its own dark halo to read over bright ground.
+  context.shadowColor = "rgba(0, 0, 0, 0.9)";
+  context.shadowBlur = 4 * s;
   context.shadowOffsetY = 1 * s;
   context.textBaseline = "middle";
   context.font = nameFont;
-  context.fillStyle = selected ? "#f8fafc" : "rgba(226, 232, 240, 0.85)";
+  context.fillStyle = selected ? "#f8fafc" : "rgba(241, 245, 249, 0.92)";
   context.fillText(name, x, cy + 0.5 * s);
   x += nameWidth + gap;
   if (approx) {
