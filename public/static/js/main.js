@@ -432,11 +432,6 @@ $("clock-now").addEventListener("click", () => {
   syncSliderToNow();
   state.globe?.setTime(null);
 });
-$("shadows").addEventListener("click", (event) => {
-  const on = event.currentTarget.getAttribute("aria-pressed") !== "true";
-  event.currentTarget.setAttribute("aria-pressed", String(on));
-  state.globe?.setShadows(on);
-});
 $("mode").addEventListener("click", async (event) => {
   const button = event.currentTarget;
   if (!state.globe || button.disabled) return;

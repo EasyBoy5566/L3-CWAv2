@@ -17,11 +17,12 @@ const EXAGGERATION = 2.5;
 const TRUE_SCALE_BELOW = 20000;
 const FULL_SCALE_ABOVE = 150000;
 
-// Where the shadow simulation takes the camera: tall buildings, clear shadows.
+// Where the building presets take the camera: tall buildings, seen from the
+// south looking north, so the sun is behind the viewer and shadows fall away.
 export const SHADOW_CITIES = {
-  taipei: { label: "臺北 101", lon: 121.5645, lat: 25.0339, heading: 205, pitch: -24, range: 2400 },
-  kaohsiung: { label: "高雄 85 大樓", lon: 120.3006, lat: 22.6116, heading: 160, pitch: -24, range: 2200 },
-  taichung: { label: "臺中 七期", lon: 120.6440, lat: 24.1630, heading: 200, pitch: -26, range: 2400 },
+  taipei: { label: "臺北 101", lon: 121.5645, lat: 25.0339, heading: 0, pitch: -24, range: 2400 },
+  kaohsiung: { label: "高雄 85 大樓", lon: 120.3006, lat: 22.6116, heading: 0, pitch: -24, range: 2200 },
+  taichung: { label: "臺中 七期", lon: 120.6440, lat: 24.1630, heading: 0, pitch: -26, range: 2400 },
 };
 
 // Bubble anchors inside each county, spread so the crowded north and the
@@ -357,7 +358,6 @@ export async function createGlobe(element, { token, counties: countyList, onHove
 
   // ---------- buildings and the shadow simulation ----------
   let buildings = null;
-  let userShadows = false;
   let simulating = false;
   const setBuildings = async (on) => {
     if (!token) throw new Error("建築模型需要 Cesium ion token。");
@@ -372,9 +372,8 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     scene.requestRender();
   };
   const applyShadows = () => {
-    const on = simulating || userShadows;
-    viewer.shadows = on;
-    viewer.terrainShadows = simulating ? Cesium.ShadowMode.RECEIVE_ONLY : on ? Cesium.ShadowMode.ENABLED : Cesium.ShadowMode.DISABLED;
+    viewer.shadows = simulating;
+    viewer.terrainShadows = simulating ? Cesium.ShadowMode.RECEIVE_ONLY : Cesium.ShadowMode.DISABLED;
     // Close up, a short shadow distance keeps building shadows crisp.
     viewer.shadowMap.maximumDistance = simulating ? 6000 : 20000;
     viewer.shadowMap.darkness = simulating ? 0.35 : 0.3;
@@ -500,11 +499,6 @@ export async function createGlobe(element, { token, counties: countyList, onHove
         viewer.clock.shouldAnimate = true;
       }
       scene.requestRender();
-    },
-
-    setShadows(on) {
-      userShadows = on;
-      applyShadows();
     },
 
     // Cesium's morph animates out to the whole globe and would then have to

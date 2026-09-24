@@ -37,9 +37,10 @@
       <button type="button" class="chip" id="clock-now" hidden>回到現在</button>
     </div>
     <span class="divider" aria-hidden="true"></span>
-    <button type="button" class="icon-btn" id="shadows" aria-pressed="false" title="地形陰影" aria-label="地形陰影">◐</button>
-    <button type="button" class="icon-btn text" id="mode" aria-pressed="false" title="切換 2D／3D" aria-label="2D 檢視">2D</button>
-    <button type="button" class="icon-btn" id="home" title="全覽" aria-label="全覽">⌂</button>
+    <button type="button" class="icon-btn text view-btn" id="mode" aria-pressed="false" title="切換 2D／3D" aria-label="2D 檢視">2D</button>
+    <button type="button" class="icon-btn text view-btn" id="home" title="回到全臺視角">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5.5v-3h3M11 2.5h3v3M14 10.5v3h-3M5 13.5H2v-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="1.7" fill="currentColor"/></svg>全覽
+    </button>
   </div>
 {% endblock %}
 {% block content %}
@@ -86,7 +87,7 @@
       <label class="toggle">
         <input type="checkbox" id="buildings">
         <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
-        <span class="toggle-text">建築模型<small id="buildings-note">OpenStreetMap · 拉近後顯示</small></span>
+        <span class="toggle-text">建築模型<small id="buildings-note">按播放鍵模擬陰影</small></span>
       </label>
     </div>
     <div class="sim-places">
@@ -95,7 +96,6 @@
         <button type="button" role="radio" data-value="taichung" aria-checked="false"><b>中</b>臺中七期</button>
         <button type="button" role="radio" data-value="kaohsiung" aria-checked="false"><b>南</b>高雄 85</button>
       </div>
-      <p class="sim-hint">按上方 ▶ 播放一天，模擬建築陰影</p>
     </div>
     </details>
 

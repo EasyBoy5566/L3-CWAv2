@@ -62,82 +62,6 @@ function dragToScroll(list) {
   list.addEventListener("pointercancel", stop);
 }
 
-// ---------- tile graphics ----------
-
-function compass(direction, speed) {
-  const ticks = Array.from({ length: 72 }, (_, i) => {
-    const a = (i * 5 * Math.PI) / 180;
-    const long = i % 18 === 0;
-    const r1 = long ? 40 : 44;
-    return `<line x1="${60 + r1 * Math.sin(a)}" y1="${60 - r1 * Math.cos(a)}" x2="${60 + 48 * Math.sin(a)}" y2="${60 - 48 * Math.cos(a)}" stroke="rgba(255,255,255,${long ? 0.7 : 0.25})" stroke-width="${long ? 1.6 : 1}"/>`;
-  }).join("");
-  const letters = [["北", 60, 31], ["東", 91, 64], ["南", 60, 96], ["西", 29, 64]]
-    .map(([t, x, y]) => `<text x="${x}" y="${y}" text-anchor="middle" font-size="10" fill="rgba(255,255,255,.75)">${t}</text>`).join("");
-  // CWA gives where the wind comes from; the arrow points where it goes.
-  const arrow = direction === null || direction === undefined ? "" : `
-    <g transform="rotate(${direction + 180} 60 60)">
-      <line x1="60" y1="98" x2="60" y2="26" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
-      <path d="M60 18l-6 10h12z" fill="#fff"/>
-      <circle cx="60" cy="100" r="3.6" fill="none" stroke="#fff" stroke-width="2"/>
-    </g>`;
-  return `<svg class="tile-art" viewBox="0 0 120 120" role="img" aria-label="風向">
-    ${ticks}${letters}${arrow}
-    <circle cx="60" cy="60" r="19" fill="rgba(10,16,32,.72)"/>
-    <text x="60" y="61" text-anchor="middle" font-size="15" font-weight="600" fill="#fff">${speed === null || speed === undefined ? "—" : speed.toFixed(1)}</text>
-    <text x="60" y="73" text-anchor="middle" font-size="9" fill="rgba(255,255,255,.7)">m/s</text>
-  </svg>`;
-}
-
-function gauge(value, low = 980, high = 1040) {
-  const start = -225;
-  const sweep = 270;
-  const point = (angle, r) => {
-    const a = (angle * Math.PI) / 180;
-    return [60 + r * Math.cos(a), 60 + r * Math.sin(a)];
-  };
-  const ticks = Array.from({ length: 46 }, (_, i) => {
-    const angle = start + (sweep * i) / 45;
-    const [x1, y1] = point(angle, 40);
-    const [x2, y2] = point(angle, 48);
-    return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="rgba(255,255,255,.28)" stroke-width="1.2" stroke-linecap="round"/>`;
-  }).join("");
-  let marker = "";
-  if (value !== null && value !== undefined) {
-    const t = Math.min(Math.max((value - low) / (high - low), 0), 1);
-    const [x1, y1] = point(start + sweep * t, 37);
-    const [x2, y2] = point(start + sweep * t, 51);
-    marker = `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/>`;
-  }
-  return `<svg class="tile-art" viewBox="0 0 120 120" role="img" aria-label="氣壓">
-    ${ticks}${marker}
-    <text x="60" y="63" text-anchor="middle" font-size="17" font-weight="600" fill="#fff">${value === null || value === undefined ? "—" : Math.round(value)}</text>
-    <text x="60" y="77" text-anchor="middle" font-size="9" fill="rgba(255,255,255,.7)">hPa</text>
-    <text x="30" y="104" text-anchor="middle" font-size="9" fill="rgba(255,255,255,.55)">低</text>
-    <text x="90" y="104" text-anchor="middle" font-size="9" fill="rgba(255,255,255,.55)">高</text>
-  </svg>`;
-}
-
-// The sun's path as a sine arc over the horizon, with a dot where it is now.
-function sunArc(sunrise, sunset, now) {
-  const width = 160;
-  const horizon = 46;
-  const x = (t) => 10 + (t + 0.25) * ((width - 20) / 1.5);
-  const y = (t) => horizon - 32 * Math.sin(Math.PI * t);
-  const points = [];
-  for (let t = -0.25; t <= 1.2501; t += 0.025) points.push(`${x(t).toFixed(1)},${y(t).toFixed(1)}`);
-  const path = `M${points.join(" L")}`;
-  const t = Math.min(Math.max((now - sunrise) / (sunset - sunrise), -0.25), 1.25);
-  const up = t >= 0 && t <= 1;
-  const clip = `sun-above-${sunrise.getTime()}`;
-  return `<svg class="tile-art wide" viewBox="0 0 ${width} 64" role="img" aria-label="太陽軌跡">
-    <defs><clipPath id="${clip}"><rect x="0" y="0" width="${width}" height="${horizon}"/></clipPath></defs>
-    <path d="${path}" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="2"/>
-    <path d="${path}" fill="none" stroke="rgba(253,224,71,.85)" stroke-width="2.4" clip-path="url(#${clip})"/>
-    <line x1="4" y1="${horizon}" x2="${width - 4}" y2="${horizon}" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
-    <circle cx="${x(t)}" cy="${y(t)}" r="${up ? 5.5 : 4}" fill="${up ? "#fff7cc" : "rgba(255,255,255,.5)"}"/>
-  </svg>`;
-}
-
 // ---------- township card ----------
 
 function townHead(town) {
@@ -156,7 +80,37 @@ function meter({ kind, label, value, level, at, tip }) {
     </div>`;
 }
 
-const RAIN_PERIODS = [["r10m", "10 分鐘"], ["r1h", "1 小時"], ["r3h", "3 小時"], ["r24h", "24 小時"], ["r3d", "3 天"]];
+// The windows are nested (the last hour is inside the last three), so the bars
+// only grow downwards: how the rain has piled up, looking back from now.
+const RAIN_WINDOWS = [["r1h", "近 1 小時"], ["r3h", "近 3 小時"], ["r24h", "近 24 小時"], ["r3d", "近 3 天"]];
+
+// CWA's rainfall grades (雨量分級).
+function rainGrade(r) {
+  const day = r.r24h ?? 0;
+  if (day >= 500) return "超大豪雨";
+  if (day >= 350) return "大豪雨";
+  if (day >= 200 || (r.r3h ?? 0) >= 100) return "豪雨";
+  if (day >= 80 || (r.r1h ?? 0) >= 40) return "大雨";
+  return null;
+}
+
+function rainBlock(r) {
+  const top = Math.max(...RAIN_WINDOWS.map(([key]) => r[key] ?? 0), r.r10m ?? 0);
+  if (top <= 0) return `<p class="rain-none">${GLYPH.uv}過去 3 天都沒有降雨</p>`;
+  const raining = (r.r10m ?? 0) > 0;
+  const since = RAIN_WINDOWS.find(([key]) => (r[key] ?? 0) > 0);
+  const grade = rainGrade(r);
+  const status = raining
+    ? `<b class="wet">正在下雨</b><span>近 10 分鐘 ${num(r.r10m, 1)} mm</span>`
+    : `<b>目前沒有下雨</b><span>${since[1]}內下過雨</span>`;
+  // Square root, so a shower still shows next to a three-day total.
+  const width = (value) => (value > 0 ? Math.max(Math.sqrt(value / top) * 100, 3) : 0);
+  return `<p class="rain-status">${status}${grade ? `<em class="grade" title="中央氣象署雨量分級">${grade}</em>` : ""}</p>
+    <div class="rain-ladder">${RAIN_WINDOWS.map(([key, label]) => `
+      <div class="rain-step${(r[key] ?? 0) > 0 ? " wet" : ""}">
+        <span>${label}</span><i><em style="width:${width(r[key] ?? 0).toFixed(1)}%"></em></i><b>${num(r[key], 1)}<small> mm</small></b>
+      </div>`).join("")}</div>`;
+}
 
 function townBody(data) {
   const parts = [];
@@ -188,10 +142,8 @@ function townBody(data) {
   // Rain: the township's wettest gauge per period, as a row of figures.
   const r = data.rain;
   parts.push(`<div class="town-block">
-      <div class="town-block-head">${GLYPH.rain}<span>雨量</span><small>${r?.count ? `鄉鎮內 ${r.count} 站最大值 · mm` : ""}</small></div>
-      ${data.rain?.error ? note("雨量資料載入失敗") : r?.count ? `<div class="rain-row">${RAIN_PERIODS.map(([key, label]) => `
-        <div class="rain-cell${key === "r24h" ? " main" : ""}${(r[key] ?? 0) > 0 ? " wet" : ""}"><b>${num(r[key], 1)}</b><span>${label}</span></div>`).join("")}</div>`
-        : note("鄉鎮內沒有雨量站")}
+      <div class="town-block-head">${GLYPH.rain}<span>雨量</span><small>${r?.count ? `累積雨量 · 鄉鎮內 ${r.count} 站最大值` : ""}</small></div>
+      ${data.rain?.error ? note("雨量資料載入失敗") : r?.count ? rainBlock(r) : note("鄉鎮內沒有雨量站")}
     </div>`);
 
   // Stations: one table, every column labelled.
@@ -282,19 +234,15 @@ export class RegionView {
     const temperature = current?.temperature ?? hourly[0]?.temperature ?? null;
     const condition = current?.weather ?? hourly[0]?.wx ?? "";
     const today = week.find((d) => d.dataDate === todayInTaipei()) ?? week[0];
-    const feels = hourly[0]?.apparentTemperature;
     const summary = (periods[0]?.description ?? "").split("。").filter(Boolean).slice(0, 2).join("。");
-    const chip = (content, extra = "") => `<span class="chip lens ${extra}">${content}</span>`;
+    // The feels-like temperature lives in the details card below.
     this.part("hero").innerHTML = `
-      <div class="wx-place">
-        <h2>${escapeHtml(name)}</h2>
-        ${chip(`${weatherIcon(kind, { night, size: 18 })}${escapeHtml(condition)}`, "cond")}
-      </div>
+      <h2 class="wx-name">${escapeHtml(name)}</h2>
       <div class="wx-now">
         <div class="wx-temp">${temperature === null ? "—" : Math.round(temperature)}<span>°</span></div>
-        <div class="wx-range">
-          ${today ? chip(`<b class="up">↑</b>最高 ${deg(today.maxt)}`) + chip(`<b class="down">↓</b>最低 ${deg(today.mint)}`) : ""}
-          ${feels === null || feels === undefined ? "" : chip(`體感 ${deg(feels)}`)}
+        <div class="wx-side">
+          <div class="wx-cond">${weatherIcon(kind, { night, size: 30 })}<span>${escapeHtml(condition)}</span></div>
+          ${today ? `<div class="wx-hilo"><span>最高 <b class="up">${deg(today.maxt)}</b></span><span>最低 <b class="down">${deg(today.mint)}</b></span></div>` : ""}
         </div>
       </div>
       ${summary ? `<p class="wx-summary">${escapeHtml(summary)}。</p>` : ""}`;
@@ -391,24 +339,26 @@ export class RegionView {
     element.innerHTML = `${title("calendar", `${week.length} 天預報`)}<ol class="days">${rows}</ol>`;
   }
 
+  // Everything else about now, in one card: two columns of label, value and a
+  // short note, where eight separate tiles used to take a screen and a half.
   renderTiles({ current, hourly, periods, astronomy }) {
     const page = this.mode === "page";
     const first = hourly[0] ?? {};
-    const tile = (glyph, label, main, foot, extra = "") => `
-      <section class="wx-card tile ${extra} ${page ? "glass" : "lens"}"${page ? ' data-refract="24"' : ""}>
-        ${title(glyph, label)}
-        <div class="tile-main">${main}</div>
-        <p class="tile-foot">${foot}</p>
-      </section>`;
+    const item = (glyph, label, value, note = "") => `
+      <div class="detail">
+        <span class="detail-label">${GLYPH[glyph]}${label}</span>
+        <b class="detail-value">${value}</b>
+        <small class="detail-note">${note}</small>
+      </div>`;
+    const unit = (value, digits, text) => (value === null || value === undefined ? "—" : `${num(value, digits)}<small>${text}</small>`);
 
     const actual = current?.temperature ?? first.temperature;
     const feels = first.apparentTemperature;
     let feelsNote = "";
     if (feels !== null && feels !== undefined && actual !== null && actual !== undefined) {
-      if (Math.abs(feels - actual) < 1.5) feelsNote = "與實際溫度相近。";
-      else feelsNote = feels > actual ? "濕度讓體感比實際更熱。" : "風讓體感比實際更涼。";
+      if (Math.abs(feels - actual) < 1.5) feelsNote = "與實際溫度相近";
+      else feelsNote = feels > actual ? "濕度讓體感更熱" : "風讓體感更涼";
     }
-
     const humidity = current?.humidity ?? first.humidity;
     const speed = current?.windSpeed ?? null;
     const direction = current?.windDir ?? null;
@@ -417,47 +367,33 @@ export class RegionView {
     const uv = uvPeriod?.uvIndex ?? null;
     const uvTomorrow = uvPeriod && uvPeriod.startTime.slice(0, 10) !== todayInTaipei();
 
+    // The next sun event, and the other one as the note.
     const today = astronomy.find((a) => a.date === todayInTaipei()) ?? astronomy[0];
-    let sunTile = "";
+    let sun = item("sun", "日出日落", "—");
     if (today?.sunrise && today?.sunset) {
-      const rise = at(today.date, today.sunrise);
-      const set = at(today.date, today.sunset);
       const now = new Date();
       const tomorrow = astronomy.find((a) => a.date > today.date);
-      let label = "日落";
-      let time = today.sunset;
-      let foot = `日出：${today.sunrise}`;
-      if (now < rise) {
-        label = "日出";
-        time = today.sunrise;
-        foot = `日落：${today.sunset}`;
-      } else if (now >= set) {
-        label = "日出";
-        time = tomorrow?.sunrise ?? "—";
-        foot = `今日日落：${today.sunset}`;
-      }
-      sunTile = tile("sun", label, `<div class="big">${time}</div>${sunArc(rise, set, now)}`, foot);
+      if (now < at(today.date, today.sunrise)) sun = item("sun", "日出", today.sunrise, `日落 ${today.sunset}`);
+      else if (now < at(today.date, today.sunset)) sun = item("sun", "日落", today.sunset, `日出 ${today.sunrise}`);
+      else sun = item("sun", "明日日出", tomorrow?.sunrise ?? "—", `今日日落 ${today.sunset}`);
     }
-
     const phase = moonPhase();
-    const moonFoot = today ? `月出 ${today.moonrise ?? "—"}　月落 ${today.moonset ?? "—"}` : "";
 
-    this.part("tiles").innerHTML = [
-      tile("thermo", "體感溫度", `<div class="big">${deg(feels)}</div>`, feelsNote),
-      tile("drop", "濕度", `<div class="big">${num(humidity, 0, "%")}</div>`,
-        first.dewPoint === null || first.dewPoint === undefined ? "" : `目前露點溫度為 ${deg(first.dewPoint)}。`),
-      tile("wind", "風", compass(direction, speed),
-        speed === null ? "暫無風的觀測。" : `${windText(direction)}，蒲福 ${beaufort(speed)} 級。`, "art"),
-      tile("gauge", "氣壓", gauge(current?.pressure ?? null), "測站氣壓；縣內無平地測站時取鄰近測站。", "art"),
-      tile("rain", "降雨量", `<div class="big">${num(current?.rain, 1, "")}<small> 毫米</small></div>`,
-        `今日累積。${next ? `未來 12 小時降雨機率 ${Math.round(next.pop)}%。` : ""}`),
-      tile("uv", uvTomorrow ? "紫外線（明日）" : "紫外線",
-        `<div class="big">${uv === null ? "—" : Math.round(uv)}</div><div class="sub">${uv === null ? "" : uvLevel(uv)}</div>
-         <div class="uv-bar">${uv === null ? "" : `<em style="left:${Math.min(uv / 11, 1) * 100}%"></em>`}</div>`,
-        uv === null ? "暫無紫外線預報。" : "白天時段的最高值。"),
-      sunTile,
-      tile("moon", "月相", `<div class="moon-row">${moonSvg(phase, 54)}<div><div class="big small">${phase.name}</div><div class="sub">照亮 ${Math.round(phase.illumination * 100)}%</div></div></div>`, moonFoot),
-    ].join("");
+    const card = `<section class="wx-card wx-details ${page ? "glass" : "lens"}"${page ? ' data-refract="24"' : ""}>
+      ${title("gauge", "目前狀況")}
+      <div class="details">
+        ${item("thermo", "體感", deg(feels), feelsNote)}
+        ${item("drop", "濕度", num(humidity, 0, "%"), first.dewPoint === null || first.dewPoint === undefined ? "" : `露點 ${deg(first.dewPoint)}`)}
+        ${item("wind", "風", unit(speed, 1, "m/s"), speed === null ? "暫無觀測" : `${windText(direction)} · 蒲福 ${beaufort(speed)} 級`)}
+        ${item("gauge", "氣壓", unit(current?.pressure, 0, "hPa"), "測站氣壓")}
+        ${item("rain", "今日雨量", unit(current?.rain, 1, "mm"), next ? `12 小時內降雨機率 ${Math.round(next.pop)}%` : "")}
+        ${item("uv", uvTomorrow ? "紫外線（明日）" : "紫外線", uv === null ? "—" : `${Math.round(uv)}<small>${uvLevel(uv)}</small>`,
+          uv === null ? "暫無預報" : `<i class="uv-line"><em style="left:${(Math.min(uv / 11, 1) * 100).toFixed(1)}%"></em></i>`)}
+        ${sun}
+        ${item("moon", "月相", `${moonSvg(phase, 18)}${phase.name}`, `照亮 ${Math.round(phase.illumination * 100)}%${today?.moonrise ? ` · 月出 ${today.moonrise}` : ""}`)}
+      </div>
+    </section>`;
+    this.part("tiles").innerHTML = card;
     refract(this.part("tiles"));
   }
 
