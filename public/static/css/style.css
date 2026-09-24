@@ -678,60 +678,6 @@ body.page-region { background: transparent; }
   .glass { transition: none; }
 }
 
-/* ---------- glass value bubbles over the counties ---------- */
-.bubbles { position: absolute; inset: 0; z-index: 6; pointer-events: none; overflow: hidden; }
-/* A bubble moved off its county points back to it: a hairline and a dot. */
-.bubble-leaders { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.bubble-leaders line { stroke: rgba(255, 255, 255, 0.7); stroke-width: 1.2; stroke-linecap: round; filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.8)); }
-.bubble-leaders circle { fill: #fff; stroke: rgba(8, 12, 28, 0.85); stroke-width: 1.2; }
-.bubble {
-  position: absolute;
-  left: 0;
-  top: 0;
-  --radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 11px 5px 8px;
-  border: 0;
-  color: var(--text);
-  font-size: 12px;
-  white-space: nowrap;
-  pointer-events: auto;
-  cursor: pointer;
-  will-change: transform;
-  transition: opacity 0.25s ease, background 0.9s ease, visibility 0s;
-  /* Glass without the backdrop blur: 22 blurred pills re-filtered the map on
-     every frame it moved and held ~60 MB of GPU surfaces. A deeper tint
-     keeps them just as readable. */
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  background: linear-gradient(180deg, rgb(var(--glass-tint) / 0.5), rgb(var(--glass-tint) / 0.66));
-  box-shadow:
-    inset 0 1px 0.5px rgba(255, 255, 255, 0.5),
-    0 4px 14px rgba(0, 0, 0, 0.35);
-}
-.bubble .dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex: none;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35), 0 0 10px currentColor;
-}
-.bubble .name { color: var(--muted); }
-.bubble .value { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.bubble.approx .value::before { content: "約"; font-size: 11px; font-weight: 500; color: var(--muted); margin-right: 2px; }
-.bubble:hover, .bubble.selected {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.14));
-  box-shadow: inset 0 1px 0.5px rgba(255, 255, 255, 0.8), 0 0 0 1px rgba(254, 240, 138, 0.7), 0 6px 18px rgba(0, 0, 0, 0.4);
-}
-.bubble.selected .name { color: var(--text); }
-.bubble.tucked { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 0.25s ease, visibility 0s 0.25s; }
-/* Far out, where every county has its bubble, they are a size smaller. */
-.bubbles.far .bubble { gap: 5px; padding: 3px 9px 3px 7px; font-size: 11px; }
-.bubbles.far .bubble .value { font-size: 12.5px; }
-.bubbles.far .bubble .dot { width: 8px; height: 8px; }
-
 /* ---------- glass select (glass.js draws it over a hidden <select>) ---------- */
 .gselect-native { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .gselect { position: relative; }

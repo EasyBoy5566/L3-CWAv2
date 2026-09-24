@@ -21,8 +21,8 @@ def test_stored_label_points_match_the_algorithm():
 
 
 def test_long_southern_counties_are_labelled_low():
-    # Their centroids, not the widest parts up north, so the bubbles above
-    # them are not pushed north.
+    # Their centroids, not their widest parts up north, so their standees
+    # stand over the counties' middles, not by their northern borders.
     assert BY_NAME["屏東縣"]["properties"]["label"][1] < 22.6
     assert BY_NAME["臺東縣"]["properties"]["label"][1] < 22.9
 

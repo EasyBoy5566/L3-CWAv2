@@ -1,9 +1,9 @@
 // The 3D Taiwan: terrain, the sun and moon at their real positions, county
-// borders draped as imagery, and glass value bubbles.
+// borders draped as imagery, and a value standee for each county.
 /* global Cesium */
-import { Bubbles } from "./bubbles.js";
 import { BOUNDS, bordersCanvas, countyAt, highlightCanvas, loadCounties, loadTowns, townAt } from "./geo.js";
 import { Overlays } from "./overlays.js";
+import { Standees } from "./standees.js";
 
 // The camera aims a little south of the island's centre: the tilted view
 // pushes the far north up towards the top bar.
@@ -309,33 +309,26 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     scene.requestRender();
   };
 
-  // ---------- bubbles ----------
+  // ---------- standees ----------
   // Each county's label point, from its shape (centroid, or pole of
   // inaccessibility; see scripts/build_geo.py). CWA's point if it has none.
   const anchors = new Map(countyList.map(({ name, lat, lon }) => {
     const label = counties.find((c) => c.name === name)?.label;
     return [name, label ? { lon: label[0], lat: label[1] } : { lat, lon }];
   }));
-  const bubbles = new Bubbles(element.parentElement, viewer, anchors, {
-    onHover: (name, position) => {
-      hovered = name;
-      refreshHighlights();
-      onHover?.(name, position);
-    },
-    onSelect,
-  });
+  const standees = new Standees(viewer, anchors);
 
-  // Bubbles sit on the rendered (exaggerated) surface once terrain is ready.
-  const liftBubbles = async (provider) => {
+  // Standees stand on the ground once its height there is known.
+  const groundStandees = async (provider) => {
     const points = [...anchors].map(([, a]) => Cesium.Cartographic.fromDegrees(a.lon, a.lat));
     try {
       await Cesium.sampleTerrainMostDetailed(provider, points);
-      bubbles.setHeights([...anchors.keys()].map((name, i) => [name, points[i].height || 0]));
+      standees.setHeights([...anchors.keys()].map((name, i) => [name, points[i].height || 0]));
     } catch (error) {
       console.warn("terrain heights unavailable", error);
     }
   };
-  if (terrain) terrain.readyEvent.addEventListener((provider) => firstTiles.then(idle).then(() => liftBubbles(provider)));
+  if (terrain) terrain.readyEvent.addEventListener((provider) => firstTiles.then(idle).then(() => groundStandees(provider)));
 
   const dataLayers = new Overlays(viewer);
 
@@ -368,7 +361,20 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       const position = pending;
       pending = null;
       if (!position) return; // the pointer left the canvas meanwhile
-      const info = dataLayers.infoFor(scene.pick(position));
+      const picked = scene.pick(position);
+      // A standee: its county, as if the pointer were over the county itself.
+      const standing = standees.countyOf(picked);
+      if (standing) {
+        onInfo?.(null);
+        if (standing !== hovered) {
+          hovered = standing;
+          refreshHighlights();
+        }
+        scene.canvas.style.cursor = "pointer";
+        onHover?.(standing, { x: position.x, y: position.y });
+        return;
+      }
+      const info = dataLayers.infoFor(picked);
       onInfo?.(info, { x: position.x, y: position.y });
       if (info) {
         scene.canvas.style.cursor = "";
@@ -398,7 +404,13 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     onHover?.(null);
   });
   handler.setInputAction((click) => {
-    const hit = dataLayers.hit(scene.pick(click.position));
+    const picked = scene.pick(click.position);
+    const standing = standees.countyOf(picked);
+    if (standing) {
+      onSelect?.(standing, { x: click.position.x, y: click.position.y });
+      return;
+    }
+    const hit = dataLayers.hit(picked);
     if (hit) {
       if (hit.cyclone !== undefined) onTyphoon?.(hit.cyclone);
       return; // the typhoon has no county
@@ -512,7 +524,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     hasTerrain: Boolean(token),
 
     setValues(layer, values, scale) {
-      bubbles.setValues(layer, values, scale);
+      standees.setValues(layer, values, scale);
     },
 
     setOverlay: (name, on) => dataLayers.set(name, on),
@@ -569,7 +581,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     // A township glows on its own; a county alone glows as the county.
     select(county, town = null) {
       selected = town ? `${county}${town}` : county;
-      bubbles.select(county);
+      standees.select(county);
       refreshHighlights();
     },
 
@@ -650,7 +662,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       updateBuildings();
       applyShadows();
       onMode?.(on);
-      const layers = [element, bubbles.layer];
+      const layers = [element];
       const motion = !matchMedia("(prefers-reduced-motion: reduce)").matches;
       const fade = (keyframes, duration) => Promise.all(layers.map((layer) =>
         layer.animate(keyframes, { duration, easing: "cubic-bezier(.4, 0, .2, 1)", fill: "forwards" }).finished));

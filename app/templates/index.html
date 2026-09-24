@@ -16,7 +16,7 @@
       window.__early[url].catch(() => {});
     }
   </script>
-  {% for module in ["main", "api", "format", "glass", "globe", "header", "panel", "town-data", "scale", "bubbles", "geo", "overlays", "cyclone", "typhoon", "charts", "icons"] %}
+  {% for module in ["main", "api", "format", "glass", "globe", "header", "panel", "town-data", "scale", "standees", "geo", "overlays", "cyclone", "typhoon", "charts", "icons"] %}
   <link rel="modulepreload" href="{{ url_for('static', filename='js/' ~ module ~ '.js') }}">
   {% endfor %}
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/cesium-1.145.0/Widgets/widgets.css') }}">

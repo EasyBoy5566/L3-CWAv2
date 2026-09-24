@@ -11,7 +11,7 @@ Counties are decoded to GeoJSON. Townships stay TopoJSON, which shares each
 border between its two neighbours and is several times smaller; the browser
 decodes it. Every name is checked against CWA's so the map and the data agree.
 
-Each county also gets a label point, where its value bubble sits (see
+Each county also gets a label point, where its value standee stands (see
 label_point). `python -m scripts.build_geo labels` recomputes just those in
 the existing file, without downloading anything.
 """
@@ -58,7 +58,7 @@ def ring(indices: list[int], arcs: list) -> list:
 
 
 # ---------- label points ----------
-# Where a county's bubble goes: its area centroid when that lies well inside
+# Where a county's standee stands: its area centroid when that lies well inside
 # it, which follows long counties (Pingtung's southern tail, Taitung) better
 # than their widest part does; otherwise the pole of inaccessibility (Mapbox's
 # polylabel), the point furthest from any border, for counties the centroid

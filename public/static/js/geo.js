@@ -22,7 +22,7 @@ export async function loadCounties(url = "/static/geo/taiwan-counties.json") {
         south = Math.min(south, lat); north = Math.max(north, lat);
       }
     }
-    // label: [lon, lat] where the county's bubble sits (scripts/build_geo.py label_point).
+    // label: [lon, lat] where the county's standee stands (scripts/build_geo.py label_point).
     return { name: feature.properties.name, polygons, bbox: { west, east, south, north }, label: feature.properties.label };
   });
 }
