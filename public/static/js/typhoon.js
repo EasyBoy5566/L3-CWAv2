@@ -1,5 +1,7 @@
-// The typhoon card: how close the cyclone is to Taiwan, what it is now, and a
-// timeline that walks a marker along its analysed track and its forecast.
+// The typhoon card, kept to three rows: the cyclone, four numbers (how close
+// its gale circle is to Taiwan, wind, pressure, movement), and a timeline that
+// walks a marker along its analysed track and its forecast. Everything else is
+// in the hover card of each track point on the map.
 import { beaufortLevel, cycloneClass, directionName, pointAt, timeline } from "./cyclone.js";
 import { escapeHtml } from "./format.js";
 
@@ -104,21 +106,19 @@ export class TyphoonCard {
         `<button type="button" class="chip${i === this.index ? " on" : ""}" data-cyclone="${i}">${escapeHtml(c.name ?? "")}</button>`).join("")}</div>`
       : "";
     const cloud = this.globe?.typhoonCloudTime?.();
-    const sources = [cloud ? `衛星雲圖 ${when(Date.parse(cloud), true)}（向日葵 9 號）` : null, "路徑與預報：中央氣象署"].filter(Boolean);
+    const sub = [cyclone.nameEn, cyclone.number ? `第 ${cyclone.number} 號` : null, cloud ? `雲圖 ${when(Date.parse(cloud), true)}` : null]
+      .filter(Boolean).map(escapeHtml).join(" · ");
     this.root.innerHTML = `
       <div class="ty-head">
         <svg class="ty-symbol" viewBox="-32 -32 64 64" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"><circle r="10"/><path d="M0 -10Q19 -10 25 -25M0 10Q-19 10 -25 25"/></g></svg>
         <div class="ty-title">
           <div><b>${escapeHtml(cyclone.name ?? "")}</b><span class="ty-class"></span></div>
-          <span>${escapeHtml(cyclone.nameEn ?? "")}${cyclone.number ? ` · 第 ${escapeHtml(cyclone.number)} 號` : ""}</span>
+          <span>${sub}</span>
         </div>
         ${tabs}
         <button type="button" class="icon-btn ty-close" aria-label="關閉颱風路徑" title="關閉颱風路徑">×</button>
       </div>
-      <div class="ty-body">
-        <div class="ty-threat"></div>
-        <div class="ty-stats"></div>
-      </div>
+      <div class="ty-stats"></div>
       <div class="ty-time">
         <button type="button" class="ty-play" aria-label="播放颱風路徑" title="播放颱風路徑">${PLAY}</button>
         <div class="ty-scale">
@@ -127,8 +127,7 @@ export class TyphoonCard {
         </div>
         <output class="ty-when"></output>
         <button type="button" class="now-btn ty-live"></button>
-      </div>
-      <p class="ty-source">${sources.map(escapeHtml).join(" · ")}</p>`;
+      </div>`;
     this.seek(this.hours);
   }
 
@@ -150,38 +149,30 @@ export class TyphoonCard {
     live.innerHTML = atNow ? "<i></i>現在" : `${RETURN}回到現在`;
     live.setAttribute("aria-label", atNow ? "目前顯示最新定位" : "回到最新定位");
     const level = beaufortLevel(p.wind);
-    const gustLevel = beaufortLevel(p.gust);
-    const stat = (label, value, unit, note = "") =>
-      `<div><small>${label}</small><b>${value}${unit ? `<small>${unit}</small>` : ""}</b><em>${note}</em></div>`;
+    const stat = (label, value, unit, note = "", extra = "") =>
+      `<div${extra}><small>${label}</small><b>${value}${unit ? `<small>${unit}</small>` : ""}</b><em>${note}</em></div>`;
+    const { gale, closest } = this.distance(p);
     $(".ty-stats").innerHTML = [
-      stat("最大風速", num(p.wind), "m/s", level === null ? "" : `${level} 級`),
-      stat("瞬間陣風", num(p.gust), "m/s", gustLevel === null ? "" : `${gustLevel} 級`),
+      gale === 0
+        ? stat("暴風圈距臺灣", "已觸及", "", closest, ' class="ty-lead alert"')
+        : stat("暴風圈距臺灣", km(gale), "km", closest, ' class="ty-lead"'),
+      stat("最大風速", num(p.wind), "m/s", [level === null ? "" : `${level} 級`, p.gust ? `陣風 ${num(p.gust)}` : ""].filter(Boolean).join(" · ")),
       stat("中心氣壓", num(p.pressure), "hPa"),
-      stat("七級風暴半徑", num(p.r15), "km"),
-      stat("十級風暴半徑", p.r25 ? num(p.r25) : "—", p.r25 ? "km" : ""),
       stat("移動", p.dir ? directionName(p.dir) : "—", "", p.speed ? `${num(p.speed)} km/h` : ""),
     ].join("");
-    $(".ty-threat").innerHTML = this.threat(p);
     this.globe?.scrubTyphoon(this.index, hours === 0 ? null : p);
   }
 
-  // How far the gale circle and the centre are from Taiwan, and the closest forecast approach.
-  threat(p) {
-    if (!this.globe) return "";
-    const here = this.globe.distanceToTaiwan(p.lon, p.lat);
-    const gale = Math.max(here.km - (p.r15 ?? 0), 0);
-    const lead = gale === 0
-      ? `<b class="alert">已觸及臺灣</b>`
-      : `<b>${km(gale)}<small>km</small></b>`;
-    const lines = [`中心距${escapeHtml(here.county ?? "臺灣")} ${km(here.km)} km`];
+  // How far the gale circle (七級風) is from Taiwan, and the forecast's closest approach.
+  distance(p) {
+    if (!this.globe) return { gale: null, closest: "" };
+    const gale = Math.max(this.globe.distanceToTaiwan(p.lon, p.lat).km - (p.r15 ?? 0), 0);
     const future = this.line.points.filter((q) => q.forecast);
-    if (future.length) {
-      const closest = future
-        .map((q) => ({ q, d: this.globe.distanceToTaiwan(q.lon, q.lat).km }))
-        .reduce((a, b) => (b.d < a.d ? b : a));
-      lines.push(`最接近 <b>${km(closest.d)}</b> km · ${when(closest.q.at)}`);
-    }
-    return `<small>七級風暴圈距臺灣</small>${lead}${lines.map((line) => `<span>${line}</span>`).join("")}`;
+    if (!future.length) return { gale, closest: "" };
+    const nearest = future
+      .map((q) => ({ q, d: this.globe.distanceToTaiwan(q.lon, q.lat).km }))
+      .reduce((a, b) => (b.d < a.d ? b : a));
+    return { gale, closest: `最接近 ${km(nearest.d)} km · ${when(nearest.q.at).split(" ")[0]}` };
   }
 
   // From the latest fix or the end, playing starts at the first analysed position.
