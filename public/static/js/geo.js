@@ -75,10 +75,22 @@ function tracePolygons(context, project, polygons) {
   }
 }
 
-/** Every county border as thin light lines on a transparent canvas. `scale` thickens them. */
-export function bordersCanvas(counties, maxSide = 4096, scale = 1) {
+/**
+ * Every county border as thin light lines on a transparent canvas. `scale`
+ * thickens them. With `towns`, the finer, fainter township lines go under
+ * them, so the close view needs one raster (and one texture) instead of two.
+ */
+export function bordersCanvas(counties, maxSide = 4096, scale = 1, towns = null) {
   const { canvas, context, project } = geoCanvas(BOUNDS, maxSide);
   context.lineJoin = "round";
+  if (towns) {
+    context.lineWidth = 1.3;
+    context.strokeStyle = "rgba(255, 255, 255, 0.42)";
+    for (const town of towns) {
+      tracePolygons(context, project, town.polygons);
+      context.stroke();
+    }
+  }
   context.lineCap = "round";
   // A dark under-stroke keeps the line readable over bright imagery.
   // Lines are drawn wide enough to survive the downsampling of a far view.
@@ -172,17 +184,4 @@ export function townAt(towns, county, lon, lat) {
   const candidates = towns.filter((t) => t.county === county);
   const name = countyAt(candidates, lon, lat);
   return candidates.find((t) => t.name === name) ?? null;
-}
-
-/** Township borders: finer and fainter than the county lines drawn over them. */
-export function townBordersCanvas(towns, maxSide = 4096) {
-  const { canvas, context, project } = geoCanvas(BOUNDS, maxSide);
-  context.lineJoin = "round";
-  context.lineWidth = 1.3;
-  context.strokeStyle = "rgba(255, 255, 255, 0.42)";
-  for (const town of towns) {
-    tracePolygons(context, project, town.polygons);
-    context.stroke();
-  }
-  return canvas;
 }

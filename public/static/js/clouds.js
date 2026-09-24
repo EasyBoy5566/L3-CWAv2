@@ -55,10 +55,9 @@ function coldness(r, g, b) {
 // fade at its borders and every seam would show as a line, so it is first
 // padded with copies of its own edge pixels. (Safari ignores the filter.)
 const PAD = 4;
-function soften(canvas) {
+function soften(canvas, make) {
   const size = canvas.width;
-  const padded = document.createElement("canvas");
-  padded.width = padded.height = size + PAD * 2;
+  const padded = make(size + PAD * 2);
   const p = padded.getContext("2d");
   const last = size - 1;
   p.drawImage(canvas, 0, 0, size, 1, PAD, 0, size, PAD); // top
@@ -66,8 +65,7 @@ function soften(canvas) {
   p.drawImage(canvas, 0, 0, 1, size, 0, PAD, PAD, size); // left
   p.drawImage(canvas, last, 0, 1, size, size + PAD, PAD, PAD, size); // right
   p.drawImage(canvas, PAD, PAD);
-  const out = document.createElement("canvas");
-  out.width = out.height = size;
+  const out = make(size);
   const o = out.getContext("2d");
   o.filter = "blur(1.2px)";
   o.drawImage(padded, -PAD, -PAD);
@@ -76,6 +74,117 @@ function soften(canvas) {
 
 // Web Mercator row → latitude, for a tile's pixel rows.
 const mercatorLat = (y) => (Math.atan(Math.sinh(y)) * 180) / Math.PI;
+const EARTH_RADIUS = 6378137; // WGS84, as Web Mercator uses it
+
+/**
+ * One GIBS tile turned into cloud: white where the cloud tops are cold,
+ * thin cloud grey-blue and see-through, faded by distance from the storm.
+ * `native` is the tile's Web Mercator rectangle in metres; `upsideDown` says
+ * the image is one of Cesium's ImageBitmaps, which it decodes flipped.
+ * `make(size)` returns a square canvas (a DOM one, or an OffscreenCanvas in
+ * the worker). Returns the result the right way up.
+ */
+export function cloudTile(image, upsideDown, native, { lon, lat, inner, outer }, make) {
+  const size = image.width;
+  const kmPerLon = 111.32 * Math.cos((lat * Math.PI) / 180);
+  const canvas = make(size);
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (upsideDown) {
+    context.translate(0, size);
+    context.scale(1, -1);
+  }
+  context.drawImage(image, 0, 0);
+  const pixels = context.getImageData(0, 0, size, size);
+  const data = pixels.data;
+  for (let row = 0; row < size; row += 1) {
+    const my = native.north - ((row + 0.5) / size) * (native.north - native.south);
+    const dy = (mercatorLat(my / EARTH_RADIUS) - lat) * 110.57;
+    for (let col = 0; col < size; col += 1) {
+      const i = (row * size + col) * 4;
+      const mx = native.west + ((col + 0.5) / size) * (native.east - native.west);
+      const dx = (((mx / EARTH_RADIUS) * 180) / Math.PI - lon) * kmPerLon;
+      const fade = 1 - smoothstep(inner, outer, Math.hypot(dx, dy));
+      const c = fade > 0 ? coldness(data[i], data[i + 1], data[i + 2]) : 0;
+      // Thin, low cloud is grey-blue and see-through; cold, deep cloud bright
+      // and opaque, so the storm keeps its texture instead of one white blob.
+      const shade = 176 + 79 * c;
+      data[i] = shade;
+      data[i + 1] = shade + 6 * (1 - c);
+      data[i + 2] = Math.min(255, shade + 16 * (1 - c));
+      data[i + 3] = 250 * smoothstep(0.02, 0.5, c) * fade;
+    }
+  }
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  context.putImageData(pixels, 0, 0);
+  return soften(canvas, make);
+}
+
+// ---------- off the main thread ----------
+// A 256-pixel tile is ~65,000 pixels of arithmetic plus a readback and a
+// blur; a storm needs dozens of tiles at once, which froze the page for up
+// to a second and a half. They are made in a worker where it can run one.
+
+let worker;
+let nextJob = 0;
+const jobs = new Map(); // id → { resolve, reject }
+function cloudWorker() {
+  if (worker !== undefined) return worker;
+  worker = null;
+  if (typeof Worker === "undefined" || typeof OffscreenCanvas === "undefined" || typeof createImageBitmap === "undefined") return worker;
+  try {
+    worker = new Worker(new URL("./clouds-worker.js", import.meta.url), { type: "module" });
+    worker.onmessage = ({ data }) => {
+      const job = jobs.get(data.id);
+      jobs.delete(data.id);
+      if (data.bitmap) job?.resolve(data.bitmap);
+      else job?.reject(new Error(data.error));
+    };
+    worker.onerror = () => {
+      // A worker that cannot start (or run OffscreenCanvas 2D) hands every
+      // pending and later tile back to the main thread.
+      for (const job of jobs.values()) job.reject(new Error("cloud worker failed"));
+      jobs.clear();
+      worker.terminate();
+      worker = null;
+    };
+  } catch {
+    worker = null;
+  }
+  return worker;
+}
+
+const domCanvas = (size) => {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  return canvas;
+};
+
+// The cloud for one tile: an ImageBitmap from the worker (upside down, as
+// Cesium expects bitmaps), or a canvas made here (right way up; Cesium flips
+// canvases on upload). The worker gets a copy of the tile, so if it fails
+// the tile is still here to be made on this thread.
+async function toCloud(image, native, params) {
+  const upsideDown = typeof ImageBitmap !== "undefined" && image instanceof ImageBitmap;
+  const pool = cloudWorker();
+  if (pool) {
+    try {
+      const bitmap = upsideDown ? image : await createImageBitmap(image);
+      const id = nextJob;
+      nextJob += 1;
+      const rect = { west: native.west, south: native.south, east: native.east, north: native.north };
+      const cloud = await new Promise((resolve, reject) => {
+        jobs.set(id, { resolve, reject });
+        pool.postMessage({ id, bitmap, upsideDown, native: rect, params });
+      });
+      // The GIBS tile is no longer needed; free it now rather than at GC.
+      bitmap.close();
+      return cloud;
+    } catch {
+      // Made below instead.
+    }
+  }
+  return cloudTile(image, upsideDown, native, params, domCanvas);
+}
 
 /**
  * One imagery layer of cloud around (lon, lat): full out to `inner` km, gone
@@ -93,51 +202,14 @@ export function addCloudLayer(viewer, time, { lon, lat, inner, outer }) {
     credit: new Cesium.Credit("衛星雲圖：NASA GIBS · JMA Himawari-9", false),
   });
   const request = provider.requestImage.bind(provider);
+  const params = { lon, lat, inner, outer };
   provider.requestImage = (x, y, level, ...rest) => {
     const loading = request(x, y, level, ...rest);
     // undefined means "throttled, ask again later"; pass that through.
-    return loading && loading.then((image) => whiten(image, provider.tilingScheme.tileXYToNativeRectangle(x, y, level)));
+    if (!loading) return loading;
+    const native = provider.tilingScheme.tileXYToNativeRectangle(x, y, level);
+    return loading.then((image) => toCloud(image, native, params));
   };
-
-  // Colour and alpha for every pixel: white cloud, thin cloud a little grey,
-  // faded by distance from the centre.
-  function whiten(image, native) {
-    const size = image.width;
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = size;
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-    // Cesium decodes tiles into ImageBitmaps already flipped upside down (WebGL
-    // cannot flip those on upload) but flips a canvas on upload. Turned back
-    // the right way up, row 0 is the tile's north edge as the maths below expects.
-    if (typeof ImageBitmap !== "undefined" && image instanceof ImageBitmap) {
-      context.translate(0, size);
-      context.scale(1, -1);
-    }
-    context.drawImage(image, 0, 0);
-    const pixels = context.getImageData(0, 0, size, size);
-    const data = pixels.data;
-    const radius = Cesium.Ellipsoid.WGS84.maximumRadius;
-    for (let row = 0; row < size; row += 1) {
-      const my = native.north - ((row + 0.5) / size) * (native.north - native.south);
-      const dy = (mercatorLat(my / radius) - lat) * 110.57;
-      for (let col = 0; col < size; col += 1) {
-        const i = (row * size + col) * 4;
-        const mx = native.west + ((col + 0.5) / size) * (native.east - native.west);
-        const dx = (((mx / radius) * 180) / Math.PI - lon) * kmPerLon;
-        const fade = 1 - smoothstep(inner, outer, Math.hypot(dx, dy));
-        const c = fade > 0 ? coldness(data[i], data[i + 1], data[i + 2]) : 0;
-        // Thin, low cloud is grey-blue and see-through; cold, deep cloud bright
-        // and opaque, so the storm keeps its texture instead of one white blob.
-        const shade = 176 + 79 * c;
-        data[i] = shade;
-        data[i + 1] = shade + 6 * (1 - c);
-        data[i + 2] = Math.min(255, shade + 16 * (1 - c));
-        data[i + 3] = 250 * smoothstep(0.02, 0.5, c) * fade;
-      }
-    }
-    context.putImageData(pixels, 0, 0);
-    return soften(canvas);
-  }
 
   const layer = viewer.imageryLayers.addImageryProvider(provider);
   // Resampled from 2 km pixels, so smooth rather than blocky up close.

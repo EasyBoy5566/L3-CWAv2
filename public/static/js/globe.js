@@ -2,7 +2,7 @@
 // borders draped as imagery, and glass value bubbles.
 /* global Cesium */
 import { Bubbles } from "./bubbles.js";
-import { BOUNDS, bordersCanvas, countyAt, highlightCanvas, loadCounties, loadTowns, townAt, townBordersCanvas } from "./geo.js";
+import { BOUNDS, bordersCanvas, countyAt, highlightCanvas, loadCounties, loadTowns, townAt } from "./geo.js";
 import { Overlays } from "./overlays.js";
 
 // The camera aims a little south of the island's centre: the tilted view
@@ -52,10 +52,15 @@ const LABEL_POINTS = {
 const OVERLAY_BRIGHTNESS = { day: 1, dusk: 1.4, night: 1.8 };
 // The selection outline must glow at any hour, so it is lifted further.
 const HIGHLIGHT_BRIGHTNESS = { day: 1.2, dusk: 2.2, night: 3.4 };
-// Above this camera height the coarse border raster is shown; below, the fine one.
-const BORDER_SWITCH = 300000;
-// Below this camera height townships are drawn, hovered and picked; above it, counties.
+// Below this camera height townships are drawn, hovered and picked; above it,
+// counties. The fine border raster (county and township lines) takes over
+// from the coarse one at the same height.
 const TOWN_LEVEL = 350000;
+// Each highlight is a raster and a texture of its own (about 10 MB for a
+// county); only the most recent few are kept.
+const KEEP_HIGHLIGHTS = 6;
+// OSM Buildings would otherwise cache up to 512 MB of tiles.
+const BUILDING_CACHE_BYTES = 160 * 1024 * 1024;
 
 function imagery(token) {
   if (token) return undefined; // Cesium ion default imagery
@@ -119,6 +124,9 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     // frame per simulated minute keeps it smooth.
     requestRenderMode: true,
     maximumRenderTimeChange: 60,
+    // 4x multisampling held about 90 MB of framebuffer for edges 2x draws
+    // nearly as well.
+    msaaSamples: 2,
   };
   const baseLayer = imagery(token);
   if (baseLayer) options.baseLayer = baseLayer;
@@ -186,19 +194,17 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   let sky = "night";
   // A single image has no mipmaps, so one border raster either aliases into
   // dashes from afar or blurs up close. Two rasters, swapped by camera height.
-  // Only the coarse one is needed for the first, distant view; the fine one
-  // and the township lines are drawn after it (see `details` below).
+  // Only the coarse one is needed for the first, distant view; the fine one,
+  // with the township lines in it, is drawn after it (see `details` below).
   const bordersCoarse = canvasLayer(viewer, bordersCanvas(counties, 1400, 0.8), BOUNDS);
   let bordersFine = null;
-  let townBorders = null;
   let towns = [];
   const overlays = [bordersCoarse];
   const townLevel = () => viewer.camera.positionCartographic.height < TOWN_LEVEL;
   const pickBorders = () => {
-    const far = viewer.camera.positionCartographic.height > BORDER_SWITCH;
-    bordersCoarse.show = far || !bordersFine;
-    if (bordersFine) bordersFine.show = !far;
-    if (townBorders) townBorders.show = townLevel();
+    const near = townLevel();
+    bordersCoarse.show = !near || !bordersFine;
+    if (bordersFine) bordersFine.show = near;
   };
   viewer.camera.changed.addEventListener(pickBorders);
   viewer.camera.percentageChanged = 0.1;
@@ -208,18 +214,15 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     overlays.push(layer);
     return layer;
   };
-  // After the first view: the fine county lines, then the townships, which
-  // are needed only close in (below TOWN_LEVEL) and for township links.
+  // After the first view: the townships, needed only close in (below
+  // TOWN_LEVEL) and for township links, and the fine raster with their lines
+  // under the county lines. One 4096 raster instead of two saves ~80 MB.
   const details = (async () => {
     await firstTiles;
-    await idle();
-    // In the coarse raster's slot, so highlights added since stay on top.
-    bordersFine = addBorders(bordersCanvas(counties, 4096), viewer.imageryLayers.indexOf(bordersCoarse));
-    pickBorders();
     const loaded = await loadTowns();
     await idle();
-    // Township lines go beneath the county lines (index 1: just above the imagery).
-    townBorders = addBorders(townBordersCanvas(loaded), 1);
+    // In the coarse raster's slot, so highlights added since stay on top.
+    bordersFine = addBorders(bordersCanvas(counties, 4096, 1, loaded), viewer.imageryLayers.indexOf(bordersCoarse));
     towns = loaded;
     pickBorders();
     scene.requestRender();
@@ -239,7 +242,8 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     if (!highlights.has(name)) {
       const feature = counties.find((c) => c.name === name) ?? towns.find((t) => t.name === name);
       highlights.set(name, (async () => {
-        const { canvas, bounds } = highlightCanvas(feature);
+        // A township covers a few kilometres; half the resolution is plenty.
+        const { canvas, bounds } = highlightCanvas(feature, feature.town ? 800 : 1400);
         const layer = canvasLayer(viewer, canvas, bounds);
         layer.brightness = HIGHLIGHT_BRIGHTNESS[sky];
         highlightLayers.push(layer);
@@ -255,10 +259,26 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   // Rasters are built asynchronously, so a slow one can land after the pointer
   // has moved on. Visibility is therefore decided from the state at the end,
   // over every built layer: exactly the hovered and selected ones glow.
+  // Beyond the few most recently used, rasters are destroyed: sweeping the
+  // pointer across the island used to leave one per township, near 1 GB.
   const refreshHighlights = async () => {
     await Promise.all([hovered, selected].filter(Boolean).map(highlightLayer));
     const wanted = new Set([hovered, selected].filter(Boolean));
     for (const [name, layer] of built) layer.show = wanted.has(name);
+    for (const name of wanted) {
+      const layer = built.get(name);
+      if (!layer) continue;
+      built.delete(name); // re-inserted last: the Map's order is recency
+      built.set(name, layer);
+    }
+    for (const [name, layer] of built) {
+      if (built.size <= KEEP_HIGHLIGHTS) break;
+      if (wanted.has(name)) continue;
+      built.delete(name);
+      highlights.delete(name);
+      highlightLayers.splice(highlightLayers.indexOf(layer), 1);
+      viewer.imageryLayers.remove(layer, true);
+    }
     scene.requestRender();
   };
 
@@ -402,16 +422,31 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     }
   };
   viewer.camera.changed.addEventListener(updateBuildings);
+  let buildingsLoading = null;
+  const loadBuildings = async () => {
+    const tileset = await Cesium.createOsmBuildingsAsync({
+      cacheBytes: BUILDING_CACHE_BYTES,
+      maximumCacheOverflowBytes: BUILDING_CACHE_BYTES / 4,
+    });
+    // One pale material reads as architecture rather than a map legend.
+    tileset.style = new Cesium.Cesium3DTileStyle({ color: "color('#e8edf4', 1.0)" });
+    tileset.shadows = Cesium.ShadowMode.ENABLED;
+    tileset.show = false;
+    scene.primitives.add(tileset);
+    buildings = tileset;
+  };
+  // Switched off, the tileset is destroyed, not hidden: its tiles and their
+  // textures are freed, and switching back on streams them again.
   const setBuildings = async (on) => {
     if (!token) throw new Error("建築模型需要 Cesium ion token。");
     buildingsWanted = on;
     if (on && !buildings) {
-      buildings = await Cesium.createOsmBuildingsAsync();
-      // One pale material reads as architecture rather than a map legend.
-      buildings.style = new Cesium.Cesium3DTileStyle({ color: "color('#e8edf4', 1.0)" });
-      buildings.shadows = Cesium.ShadowMode.ENABLED;
-      buildings.show = false;
-      scene.primitives.add(buildings);
+      buildingsLoading ??= loadBuildings().finally(() => { buildingsLoading = null; });
+      await buildingsLoading;
+    }
+    if (!buildingsWanted && buildings) {
+      scene.primitives.remove(buildings);
+      buildings = null;
     }
     updateBuildings();
     scene.requestRender();
@@ -591,7 +626,9 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       const fade = (keyframes, duration) => Promise.all(layers.map((layer) =>
         layer.animate(keyframes, { duration, easing: "cubic-bezier(.4, 0, .2, 1)", fill: "forwards" }).finished));
       try {
-        if (motion) await fade([{ opacity: 1, transform: "scale(1)", filter: "blur(0)" }, { opacity: 0, transform: "scale(0.97)", filter: "blur(6px)" }], 260);
+        // Opacity and scale only: a CSS blur over the full-screen map stalled the
+        // switch back to 3D for up to a second.
+        if (motion) await fade([{ opacity: 1, transform: "scale(1)" }, { opacity: 0, transform: "scale(0.97)" }], 260);
         await new Promise((resolve) => {
           const landed = () => {
             scene.morphComplete.removeEventListener(landed);
@@ -604,7 +641,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
         if (on) viewer.camera.setView({ destination: Cesium.Rectangle.fromDegrees(...TAIWAN_2D) });
         else flyHome(0);
         await tilesSettled(700);
-        if (motion) await fade([{ opacity: 0, transform: "scale(1.03)", filter: "blur(6px)" }, { opacity: 1, transform: "scale(1)", filter: "blur(0)" }], 460);
+        if (motion) await fade([{ opacity: 0, transform: "scale(1.03)" }, { opacity: 1, transform: "scale(1)" }], 460);
       } finally {
         for (const layer of layers) layer.getAnimations().forEach((animation) => animation.cancel());
         mode2D = scene.mode !== Cesium.SceneMode.SCENE3D;

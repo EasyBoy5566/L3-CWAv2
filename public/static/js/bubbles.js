@@ -78,6 +78,11 @@ export class Bubbles {
     this.scene.requestRender();
   }
 
+  // Runs after every frame, so it must not make the browser lay the page out
+  // more than once: every measurement (the chrome's boxes, bubble sizes, and
+  // the canvas size Cesium's projection reads) happens before any write, and
+  // only what changed is written. Interleaving them cost a full layout per
+  // bubble, 22 per frame.
   update() {
     const camera = this.scene.camera;
     const far = camera.positionCartographic.height > FAR;
@@ -88,15 +93,22 @@ export class Bubbles {
         item.size = null;
       }
     }
-    const occluder = new Cesium.EllipsoidalOccluder(Cesium.Ellipsoid.WGS84, camera.positionWC);
-    const canvas = this.scene.canvas;
+
+    // ---- reads ----
     const placed = [...document.querySelectorAll(OBSTACLES)].map((el) => {
       const r = el.getBoundingClientRect();
       return { x: r.left, y: r.top, w: r.width, h: r.height };
     });
+    for (const item of this.items.values()) {
+      if (!item.size) item.size = { w: item.element.offsetWidth, h: item.element.offsetHeight };
+    }
+    const canvas = this.scene.canvas;
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const occluder = new Cesium.EllipsoidalOccluder(Cesium.Ellipsoid.WGS84, camera.positionWC);
     const order = [...this.items.keys()].sort((a, b) =>
       (b === this.selected) - (a === this.selected) || PRIORITY.indexOf(a) - PRIORITY.indexOf(b));
-
+    const plan = [];
     for (const name of order) {
       const item = this.items.get(name);
       // Heights are stored unexaggerated; the exaggeration eases with camera height.
@@ -105,17 +117,31 @@ export class Bubbles {
       const screen = this.scene.mode === Cesium.SceneMode.SCENE3D && !occluder.isPointVisible(world)
         ? undefined
         : this.toWindow(this.scene, world);
-      if (!screen || screen.x < 0 || screen.y < 0 || screen.x > canvas.clientWidth || screen.y > canvas.clientHeight) {
-        item.element.classList.add("tucked");
+      if (!screen || screen.x < 0 || screen.y < 0 || screen.x > width || screen.y > height) {
+        plan.push([item, null]);
         continue;
       }
-      if (!item.size) item.size = { w: item.element.offsetWidth, h: item.element.offsetHeight };
       const box = { x: screen.x - item.size.w / 2, y: screen.y - item.size.h - 8, w: item.size.w, h: item.size.h };
       const clash = placed.some((p) => box.x < p.x + p.w + GAP && p.x < box.x + box.w + GAP && box.y < p.y + p.h + GAP && p.y < box.y + box.h + GAP);
-      item.element.classList.toggle("tucked", clash);
-      if (clash) continue;
+      if (clash) {
+        plan.push([item, null]);
+        continue;
+      }
       placed.push(box);
-      item.element.style.transform = `translate(${box.x.toFixed(1)}px, ${box.y.toFixed(1)}px)`;
+      plan.push([item, `translate(${box.x.toFixed(1)}px, ${box.y.toFixed(1)}px)`]);
+    }
+
+    // ---- writes ----
+    for (const [item, transform] of plan) {
+      const tucked = transform === null;
+      if (item.tucked !== tucked) {
+        item.tucked = tucked;
+        item.element.classList.toggle("tucked", tucked);
+      }
+      if (transform && item.transform !== transform) {
+        item.transform = transform;
+        item.element.style.transform = transform;
+      }
     }
   }
 }

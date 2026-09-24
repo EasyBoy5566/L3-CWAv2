@@ -61,7 +61,7 @@ const bend = (() => {
 const LIGHT = [-0.62, -0.78]; // from the top left
 
 // The displacement map (red x, green y) and the specular map (white, alpha
-// the highlight) for a w×h rounded rectangle.
+// the highlight) for a w×h rounded rectangle, as canvases.
 function glassMaps(width, height, radius, bezel) {
   const scale = 0.5; // half resolution is plenty; feImage stretches it back
   const cw = Math.max(2, Math.ceil(width * scale));
@@ -113,7 +113,7 @@ function glassMaps(width, height, radius, bezel) {
   }
   shift.context.putImageData(shift.image, 0, 0);
   shine.context.putImageData(shine.image, 0, 0);
-  return { displacement: shift.canvas.toDataURL(), specular: shine.canvas.toDataURL() };
+  return { displacement: shift.canvas, specular: shine.canvas };
 }
 
 function build(element) {
@@ -155,21 +155,37 @@ function build(element) {
       <feBlend in="shine" in2="refracted" mode="screen"/>`;
     defs.append(filter);
   }
-  for (const [name, value] of [["x", 0], ["y", 0], ["width", width], ["height", height]]) filter.setAttribute(name, value);
+  // The maps are PNG-encoded off the main thread (toBlob, not toDataURL,
+  // which took ~300 ms on the main thread for a panel). The filter changes
+  // only once both are ready, so it never runs with a missing map.
+  const version = (entry.version ?? 0) + 1;
+  entry.version = version;
   const maps = glassMaps(width, height, radius, bezel);
-  const [map, shine] = filter.querySelectorAll("feImage");
-  for (const [image, href] of [[map, maps.displacement], [shine, maps.specular]]) {
-    image.setAttribute("width", width);
-    image.setAttribute("height", height);
-    image.setAttribute("href", href);
-  }
-  // Red bends least and blue most, as in glass; the spread is a few percent.
-  const spread = { r: 0.94, g: 1, b: 1.07 };
-  for (const node of filter.querySelectorAll("feDisplacementMap")) node.setAttribute("scale", strength * spread[node.dataset.spread]);
-
-  const value = `url(#${entry.id}) blur(${blur}) saturate(190%) brightness(1.06)`;
-  element.style.backdropFilter = value;
+  Promise.all([maps.displacement, maps.specular].map(blobUrl)).then(([displacement, specular]) => {
+    if (entry.version !== version || !element.isConnected) {
+      URL.revokeObjectURL(displacement);
+      URL.revokeObjectURL(specular);
+      return;
+    }
+    for (const [name, value] of [["x", 0], ["y", 0], ["width", width], ["height", height]]) filter.setAttribute(name, value);
+    const [map, shine] = filter.querySelectorAll("feImage");
+    for (const [image, href] of [[map, displacement], [shine, specular]]) {
+      image.setAttribute("width", width);
+      image.setAttribute("height", height);
+      image.setAttribute("href", href);
+    }
+    // Red bends least and blue most, as in glass; the spread is a few percent.
+    const spread = { r: 0.94, g: 1, b: 1.07 };
+    for (const node of filter.querySelectorAll("feDisplacementMap")) node.setAttribute("scale", strength * spread[node.dataset.spread]);
+    for (const url of entry.urls ?? []) URL.revokeObjectURL(url);
+    entry.urls = [displacement, specular];
+    element.style.backdropFilter = `url(#${entry.id}) blur(${blur}) saturate(190%) brightness(1.06)`;
+  }, () => {});
 }
+
+const blobUrl = (canvas) => new Promise((resolve, reject) => {
+  canvas.toBlob((blob) => (blob ? resolve(URL.createObjectURL(blob)) : reject(new Error("toBlob failed"))), "image/png");
+});
 
 const pending = new Set();
 let frame = 0;
@@ -208,6 +224,8 @@ export function refreshRefraction() {
   if (!refractionEnabled) return;
   for (const [element, entry] of registry) {
     if (!element.isConnected) {
+      for (const url of entry.urls ?? []) URL.revokeObjectURL(url);
+      defs.querySelector(`#${entry.id}`)?.remove();
       registry.delete(element);
       continue;
     }
