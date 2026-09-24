@@ -135,6 +135,10 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   scene.sun.show = true;
   viewer.shadowMap.softShadows = true;
   viewer.shadowMap.size = 2048;
+  // At Cesium's default bias (2e-5) the buildings shadow themselves: every lit
+  // wall showed a moiré of stripes. The bias has no public setter; the shader
+  // reads it as a uniform each frame.
+  viewer.shadowMap._primitiveBias.depthBias = 1e-3;
   viewer.creditDisplay.addStaticCredit(new Cesium.Credit("資料：中央氣象署開放資料 · 縣市界：內政部國土測繪中心", false));
   viewer.clock.currentTime = Cesium.JulianDate.now();
   viewer.clock.clockStep = Cesium.ClockStep.SYSTEM_CLOCK;
@@ -380,6 +384,8 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   let buildings = null;
   let buildingsWanted = false;
   let simulating = false;
+  // True in 2D and throughout a morph either way: only a finished 3D scene
+  // draws buildings and shadows.
   let mode2D = false;
   // The buildings are drawn (and so load their tiles) only in 3D, close in,
   // at true scale. Tiles loaded while the terrain was still exaggerated kept
@@ -387,7 +393,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   // projected into 2D at all: rendering stopped with an error.
   const updateBuildings = () => {
     if (!buildings) return;
-    const show = buildingsWanted && !mode2D
+    const show = buildingsWanted && !mode2D && scene.mode === Cesium.SceneMode.SCENE3D
       && viewer.camera.positionCartographic.height < TRUE_SCALE_BELOW
       && scene.verticalExaggeration === 1;
     if (buildings.show !== show) {
@@ -569,8 +575,13 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     async setMode2D(on) {
       if (switching || (on === (scene.mode === Cesium.SceneMode.SCENE2D))) return;
       switching = true;
-      // Buildings and their shadows leave before the morph renders a frame.
-      mode2D = on;
+      // A flight still under way (a preset, say) would keep steering the
+      // camera through the morph and leave 2D a kilometre above one city.
+      viewer.camera.cancelFlight();
+      // Buildings and their shadows leave before the morph renders a frame,
+      // and come back only once the scene is 3D again: shown in a 2D frame,
+      // a building tile cannot be projected and rendering stops.
+      mode2D = true;
       updateBuildings();
       applyShadows();
       onMode?.(on);
@@ -595,6 +606,9 @@ export async function createGlobe(element, { token, counties: countyList, onHove
         if (motion) await fade([{ opacity: 0, transform: "scale(1.03)", filter: "blur(6px)" }, { opacity: 1, transform: "scale(1)", filter: "blur(0)" }], 460);
       } finally {
         for (const layer of layers) layer.getAnimations().forEach((animation) => animation.cancel());
+        mode2D = scene.mode !== Cesium.SceneMode.SCENE3D;
+        updateBuildings();
+        applyShadows();
         switching = false;
         scene.requestRender();
       }
