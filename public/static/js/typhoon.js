@@ -97,10 +97,9 @@ export class TyphoonCard {
     const { first, last } = this.line;
     const span = last - first || 1;
     const at = (hours) => `${(((hours - first) / span) * 100).toFixed(2)}%`;
-    // Past track solid, forecast lighter; a tick for every fix and forecast point.
+    // Past track solid, forecast lighter; a dot for every fix and forecast point.
     const track = `linear-gradient(90deg, rgba(255,255,255,.55) 0 ${at(0)}, rgba(255,255,255,.18) ${at(0)} 100%)`;
-    const ticks = this.line.points.map((p) =>
-      `<i class="${p.forecast ? "f" : ""}" style="left:${at(p.hours)};--c:${cycloneClass(p.wind).color}"></i>`).join("");
+    const ticks = this.line.points.map((p) => `<i class="${p.forecast ? "f" : ""}" style="left:${at(p.hours)}"></i>`).join("");
     const tabs = this.cyclones.length > 1
       ? `<div class="ty-tabs">${this.cyclones.map((c, i) =>
         `<button type="button" class="chip${i === this.index ? " on" : ""}" data-cyclone="${i}">${escapeHtml(c.name ?? "")}</button>`).join("")}</div>`

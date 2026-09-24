@@ -992,13 +992,7 @@ body.page-region { background: transparent; }
 .ty-stats b { font-size: 19px; font-weight: 600; line-height: 1.3; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ty-stats b small { margin-left: 3px; font-weight: 500; }
 .ty-stats em { min-height: 1em; font-style: normal; font-size: 11px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ty-stats .ty-lead {
-  margin: -4px 0;
-  padding: 4px 12px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--ty) 16%, transparent), rgba(255, 255, 255, 0.03));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ty) 28%, transparent);
-}
+/* The distance to Taiwan leads by size alone, in the same row as the rest. */
 .ty-stats .ty-lead b { font-size: 22px; font-weight: 700; }
 .ty-stats .ty-lead em { color: var(--muted); }
 .ty-stats .ty-lead.alert b { color: #fca5a5; }
@@ -1011,6 +1005,7 @@ body.page-region { background: transparent; }
   padding-top: 8px;
   border-top: 1px solid var(--inner-line);
 }
+/* Play: a round drop of clear glass, like back-to-now beside it. */
 .ty-play {
   display: grid;
   place-items: center;
@@ -1018,13 +1013,20 @@ body.page-region { background: transparent; }
   height: 36px;
   border-radius: 50%;
   border: 0;
-  color: #0b1220;
-  background: var(--ty);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ty) 22%, transparent), 0 4px 14px color-mix(in srgb, var(--ty) 40%, transparent);
+  color: var(--text);
+  background:
+    radial-gradient(110% 90% at 30% 0%, rgba(255, 255, 255, 0.3), transparent 60%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.06));
+  box-shadow:
+    inset 0 1px 0.5px rgba(255, 255, 255, 0.75),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.18),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.28),
+    0 3px 12px rgba(0, 0, 0, 0.28);
+  -webkit-backdrop-filter: blur(6px) saturate(180%);
+  backdrop-filter: blur(6px) saturate(180%);
   cursor: pointer;
-  transition: transform 0.15s var(--ease);
 }
-.ty-play svg { width: 15px; height: 15px; }
+.ty-play svg { width: 15px; height: 15px; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45)); }
 .ty-play:hover { transform: scale(1.06); }
 .ty-play:active { transform: scale(0.94); }
 .ty-scale { position: relative; padding-bottom: 14px; }
@@ -1034,8 +1036,9 @@ body.page-region { background: transparent; }
 .typhoon-card input.ty-range::-moz-range-track { background: var(--track); }
 .ty-ticks { position: absolute; left: 11px; right: 11px; top: 50%; height: 0; pointer-events: none; }
 .ty-scale .ty-ticks { top: calc(50% - 7px); }
-.ty-ticks i { position: absolute; top: -2px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--c); box-shadow: 0 0 4px var(--c); }
-.ty-ticks i.f { box-shadow: none; opacity: 0.75; }
+/* A dot for every fix and forecast point: solid for the past, faint ahead. */
+.ty-ticks i { position: absolute; top: -2px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: rgba(255, 255, 255, 0.85); }
+.ty-ticks i.f { background: rgba(255, 255, 255, 0.35); }
 .ty-now-mark { position: absolute; top: 12px; transform: translateX(-50%); font-size: 10.5px; font-weight: 600; color: var(--muted); white-space: nowrap; }
 .ty-when { display: grid; justify-items: end; min-width: 84px; font-variant-numeric: tabular-nums; }
 .ty-when b { font-size: 14px; font-weight: 600; }
