@@ -54,6 +54,7 @@
   </div>
   <div id="fallback" class="fallback" hidden></div>
 
+  <div class="left-stack">
   <aside class="controls glass" data-refract aria-label="地圖圖層">
     <button type="button" class="controls-peek" id="controls-peek" aria-expanded="false" aria-controls="controls-body">
       <svg class="peek-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 1.8 5.2 8 8.4l6.2-3.2z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="m1.8 8.1 6.2 3.2 6.2-3.2M1.8 11 8 14.2l6.2-3.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/></svg>
@@ -110,6 +111,13 @@
 
     <div class="legend card-legend" id="legend" aria-label="圖例"></div>
   </aside>
+
+  <!-- A township's weather, under the controls, when one is picked on the map. -->
+  <section id="town-card" class="town-panel glass" data-refract="36" aria-label="鄉鎮天氣" hidden>
+    <button type="button" class="icon-btn town-close" aria-label="關閉鄉鎮資料" title="關閉鄉鎮資料">×</button>
+    <div class="town-scroll" id="town-content"></div>
+  </section>
+  </div>
 
   <section id="typhoon-card" class="typhoon-card glass" data-refract="36" aria-label="颱風資訊" hidden></section>
 

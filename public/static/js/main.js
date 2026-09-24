@@ -2,10 +2,10 @@
 import { getJSON } from "./api.js";
 import { loadECharts } from "./charts.js";
 import { dayLabel, escapeHtml, hhmm, num } from "./format.js";
-import { GlassSelect, Segmented, prefersReducedMotion, refract, revealInline, setSky, springEasing, stretchRefraction } from "./glass.js";
+import { GlassSelect, Segmented, ensureRefraction, prefersReducedMotion, refract, revealInline, setSky, springEasing, stretchRefraction } from "./glass.js";
 import { createGlobe } from "./globe.js";
 import { renderFreshness } from "./header.js";
-import { RegionView } from "./panel.js";
+import { RegionView, townBody, townHead } from "./panel.js";
 import { SECTIONS, TownData } from "./town-data.js";
 import { TyphoonCard } from "./typhoon.js";
 import { MISSING, colorAt, renderLegend, scaleFor } from "./scale.js";
@@ -131,11 +131,8 @@ const ALL_SECTIONS = Object.keys(SECTIONS);
 function showTown(town) {
   state.town = town;
   state.globe?.select(state.region, town?.town);
-  if (!town) {
-    state.view?.hideTown();
-    return;
-  }
-  state.view?.showTown(town, townData, ALL_SECTIONS);
+  if (town) openTownCard(town);
+  else closeTownCard();
 }
 
 function openRegion(name, { push = true, fly = true, origin = null, town = null } = {}) {
@@ -163,6 +160,7 @@ function closeRegion({ push = true } = {}) {
   state.view?.dispose();
   state.view = null;
   state.town = null;
+  closeTownCard();
   setCounty("");
   state.globe?.select(null);
   if (push) history.pushState({ region: null }, "", "/");
@@ -334,6 +332,96 @@ $("fallback").addEventListener("click", (event) => {
   if (tile) openRegion(tile.dataset.name, { origin: { x: event.clientX, y: event.clientY } });
 });
 
+// ---------- the left column: the controls and a township's card ----------
+// Both cards change height on a spring (springHeight). Their glass follows
+// every frame (stretchRefraction), for the one springing and for the one it
+// pushes or squeezes: the column is a flex column, so the controls unfolding
+// moves and may shorten the township card below.
+const leftCards = () => [...document.querySelectorAll(".left-stack > .glass:not([hidden])")];
+let following = 0;
+function followLeftCards() {
+  for (const card of leftCards()) card.classList.add("morphing");
+  if (following) return;
+  const step = () => {
+    const cards = leftCards();
+    for (const card of cards) stretchRefraction(card, card.offsetHeight);
+    const moving = cards.some((card) => card.getAnimations().some((a) => a.playState === "running" && a.effect?.getKeyframes?.().some((k) => "height" in k)));
+    if (moving) {
+      following = requestAnimationFrame(step);
+      return;
+    }
+    following = 0;
+    for (const card of document.querySelectorAll(".left-stack > .glass")) {
+      card.classList.remove("morphing");
+      if (!card.hidden) ensureRefraction(card);
+    }
+  };
+  following = requestAnimationFrame(step);
+}
+// Spring `card` from the height it had (`from`, measured before the change)
+// to the height it has now.
+function springHeight(card, from, easing = "spring", duration = 700) {
+  for (const animation of card.getAnimations()) if (animation.effect?.getKeyframes?.().some((k) => "height" in k)) animation.cancel();
+  const to = card.offsetHeight;
+  if (!prefersReducedMotion() && Math.abs(to - from) > 1) {
+    card.animate(
+      [{ height: `${from}px`, minHeight: "0px", overflow: "hidden" }, { height: `${to}px`, minHeight: "0px", overflow: "hidden" }],
+      { duration, easing: springEasing(easing) },
+    );
+  }
+  followLeftCards();
+}
+
+// The township card: its header at once, then its data; each change springs.
+const townCard = $("town-card");
+refract(townCard);
+let townShown = null;
+async function openTownCard(town) {
+  const opening = townCard.hidden || townCard.dataset.closing;
+  const from = opening ? 0 : townCard.offsetHeight;
+  delete townCard.dataset.closing;
+  townShown = town;
+  townCard.hidden = false;
+  $("town-content").innerHTML = `${townHead(town)}<div class="skeleton"></div>`;
+  $("town-content").scrollTop = 0;
+  springHeight(townCard, from, "spring", 700);
+  const data = await townData.forTown(town, ALL_SECTIONS);
+  if (townShown !== town) return; // another township was picked meanwhile
+  const before = townCard.offsetHeight;
+  $("town-content").innerHTML = `${townHead(town)}${townBody(data)}`;
+  springHeight(townCard, before, "spring-soft", 560);
+}
+function closeTownCard() {
+  townShown = null;
+  if (townCard.hidden || townCard.dataset.closing) return;
+  townCard.dataset.closing = "1";
+  const from = townCard.offsetHeight;
+  for (const animation of townCard.getAnimations()) animation.cancel();
+  if (prefersReducedMotion()) {
+    townCard.hidden = true;
+    delete townCard.dataset.closing;
+    return;
+  }
+  const animation = townCard.animate(
+    [{ height: `${from}px`, minHeight: "0px", opacity: 1, overflow: "hidden" }, { height: "0px", minHeight: "0px", opacity: 0, overflow: "hidden" }],
+    { duration: 300, easing: "cubic-bezier(.4, 0, .6, 1)" },
+  );
+  followLeftCards();
+  animation.finished.then(() => {
+    if (!townCard.dataset.closing) return; // reopened meanwhile
+    delete townCard.dataset.closing;
+    townCard.hidden = true;
+    animation.cancel();
+  }, () => {});
+}
+// Closing the township card keeps its county open.
+townCard.querySelector(".town-close").addEventListener("click", () => {
+  if (!state.region) return closeTownCard();
+  showTown(null);
+  history.pushState({}, "", regionUrl(state.region, null));
+  document.title = `${state.region} · 臺灣 3D 氣象`;
+});
+
 // ---------- controls ----------
 // The controls card stays folded to its header and legend, and unfolds while
 // the pointer is over it (or the keyboard is in it, or one of its menus is
@@ -341,41 +429,15 @@ $("fallback").addEventListener("click", (event) => {
 const controls = document.querySelector(".controls");
 const canHover = matchMedia("(hover: hover)").matches;
 let closeTimer = 0;
-let morphTimer = 0;
 function setControlsOpen(open) {
   if (controls.classList.contains("open") === open) return;
   // The card's height springs from the old size to the new one: opening
   // overshoots a little and settles; closing tucks in with a smaller bounce.
-  const from = controls.getBoundingClientRect().height;
-  controls.getAnimations().forEach((animation) => animation.cancel());
+  const from = controls.offsetHeight;
   controls.classList.toggle("open", open);
   $("controls-peek").setAttribute("aria-expanded", String(open));
   $("controls-body").inert = !open;
-  const to = controls.getBoundingClientRect().height;
-  // The glass's refraction follows the height frame by frame (its maps
-  // stretch rather than rebuild; glass.js), so the rim holds throughout.
-  // "morphing" keeps the resize observer from rebuilding it meanwhile.
-  controls.classList.add("morphing");
-  const duration = prefersReducedMotion() ? 0 : open ? 700 : 520;
-  cancelAnimationFrame(morphTimer);
-  if (!duration) {
-    stretchRefraction(controls, to);
-    controls.classList.remove("morphing");
-    return;
-  }
-  const animation = controls.animate(
-    [{ height: `${from}px`, overflow: "hidden" }, { height: `${to}px`, overflow: "hidden" }],
-    { duration, easing: springEasing(open ? "spring" : "spring-soft") },
-  );
-  const follow = () => {
-    stretchRefraction(controls, controls.getBoundingClientRect().height);
-    if (animation.playState === "running") morphTimer = requestAnimationFrame(follow);
-  };
-  follow();
-  animation.finished.then(() => {
-    stretchRefraction(controls, to);
-    controls.classList.remove("morphing");
-  }, () => {});
+  springHeight(controls, from, open ? "spring" : "spring-soft", open ? 700 : 520);
 }
 // Kept open while a keyboard user is in it or one of its menus is open (a
 // menu sits on <body>, so the pointer leaves the card to use it).

@@ -118,9 +118,10 @@ function glassMaps(width, height, radius, bezel) {
 }
 
 function build(element) {
-  const rect = element.getBoundingClientRect();
-  const width = Math.round(rect.width);
-  const height = Math.round(rect.height);
+  // Layout size, not the on-screen box: a card mid-entrance is scaled down,
+  // and a map built for that size left its rim inside the card's real edge.
+  const width = element.offsetWidth;
+  const height = element.offsetHeight;
   if (width < 4 || height < 4) return;
   const entry = registry.get(element);
   if (entry.width === width && entry.height === height) return;
@@ -210,6 +211,16 @@ function stretch(filter, entry, width, height) {
     const y = part === "top" ? 0 : part === "mid" ? cap : height - cap;
     image.setAttribute("y", y);
     image.setAttribute("height", Math.max(part === "mid" ? height - 2 * cap : cap, 0));
+  }
+}
+
+/** Build an element's refraction if it has none yet, or none for its size (after a morph). */
+export function ensureRefraction(element) {
+  const entry = registry.get(element);
+  if (!refractionEnabled || !entry) return;
+  if (!entry.cap || entry.width !== element.offsetWidth) {
+    entry.width = 0;
+    schedule(element);
   }
 }
 

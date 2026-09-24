@@ -64,14 +64,10 @@ function dragToScroll(list) {
 
 // ---------- township card ----------
 
-// A township is shown above its county. Each is tagged with its scope, and a
-// labelled rule marks where the county's own weather begins.
-function townHead(town) {
+// A township's weather, for its own card beside the controls (town-card.js),
+// apart from the county's panel: sized for a narrow column.
+export function townHead(town) {
   return `<div class="town-head"><span class="scope-tag">鄉鎮</span><h3>${escapeHtml(town.town)}</h3><span>${escapeHtml(town.county)}</span></div>`;
-}
-
-function countyRule(town) {
-  return `<div class="scope-rule" role="separator"><span>${escapeHtml(town.county)} 全縣</span></div>`;
 }
 
 // Where each gauge's marker sits: heat-injury index 24–38, UV 0–12.
@@ -118,7 +114,7 @@ function rainBlock(r) {
       </div>`).join("")}</div>`;
 }
 
-function townBody(data) {
+export function townBody(data) {
   const parts = [];
   const note = (text) => `<p class="note">${text}</p>`;
 
@@ -158,14 +154,13 @@ function townBody(data) {
       <div class="town-block-head">${GLYPH.thermo}<span>氣象站</span><small>${st?.list?.length ? `${st.count} 站 · ${hhmm(st.time)} 觀測` : ""}</small></div>
       ${data.stations?.error ? note("觀測資料載入失敗") : st?.list?.length ? `
       <table class="town-table">
-        <colgroup><col><col class="c-alt"><col class="c-t"><col class="c-rh"><col class="c-gust"></colgroup>
-        <thead><tr><th>測站</th><th>海拔</th><th>氣溫</th><th>濕度</th><th>陣風</th></tr></thead>
+        <colgroup><col><col class="c-t"><col class="c-rh"><col class="c-gust"></colgroup>
+        <thead><tr><th>測站</th><th>氣溫</th><th>濕度</th><th>陣風<small> m/s</small></th></tr></thead>
         <tbody>${st.list.map((s) => `<tr>
-          <td title="${escapeHtml(s.name)}">${escapeHtml(s.name)}</td>
-          <td>${s.alt === null ? "—" : `${Math.round(s.alt)} m`}</td>
+          <td title="${escapeHtml(s.name)}">${escapeHtml(s.name)}<small>${s.alt === null ? "" : `${Math.round(s.alt)} m`}</small></td>
           <td class="t">${num(s.t, 1, "°")}</td>
           <td>${num(s.rh, 0, "%")}</td>
-          <td>${s.gust === null ? "—" : `${num(s.gust, 1)} m/s`}</td>
+          <td>${s.gust === null ? "—" : num(s.gust, 1)}</td>
         </tr>`).join("")}</tbody>
       </table>` : note("鄉鎮內沒有氣象站")}
     </div>`);
@@ -190,7 +185,6 @@ export class RegionView {
     this.container.classList.add("wx");
     this.container.innerHTML = `
       ${page ? "" : `<div class="wx-compact" data-part="compact" aria-hidden="true"></div>`}
-      <section class="town" data-part="town" hidden></section>
       <header class="wx-hero" data-part="hero"><div class="skeleton"></div></header>
       ${card("hourly")}
       ${card("chart")}
@@ -247,7 +241,7 @@ export class RegionView {
     const summary = (periods[0]?.description ?? "").split("。").filter(Boolean).slice(0, 2).join("。");
     // The feels-like temperature lives in the details card below.
     this.part("hero").innerHTML = `
-      <h2 class="wx-name"><span class="scope-tag">縣市</span>${escapeHtml(name)}</h2>
+      <h2 class="wx-name">${escapeHtml(name)}</h2>
       <div class="wx-now">
         <div class="wx-temp">${temperature === null ? "—" : Math.round(temperature)}<span>°</span></div>
         <div class="wx-side">
@@ -412,28 +406,6 @@ export class RegionView {
       ? ` · <a href="/region?${new URLSearchParams({ name })}" target="_blank" rel="noopener">開啟完整頁面 ↗</a>` : "";
     const observed = current ? `${hhmm(current.observedAt)} 觀測（${current.stationCount} 站中位數）` : "無即時觀測";
     this.part("foot").innerHTML = `${observed} · 預報 ${hhmm(forecastFetchedAt)} 取得 · 資料：中央氣象署${link}`;
-  }
-
-  // ---------- township card ----------
-
-  /** Show one township's data above the county's hero. `town` comes from geo.loadTowns. */
-  async showTown(town, townData, sections) {
-    const element = this.part("town");
-    this.town = town;
-    element.hidden = false;
-    element.innerHTML = `${townHead(town)}<div class="wx-card lens town-card"><div class="skeleton town-skeleton"></div></div>${countyRule(town)}`;
-    this.container.scrollTo({ top: 0, behavior: "smooth" });
-    const data = await townData.forTown(town, sections);
-    if (this.town !== town || !element.isConnected) return; // another township was picked meanwhile
-    element.innerHTML = `${townHead(town)}<div class="wx-card lens town-card">${townBody(data)}</div>${countyRule(town)}`;
-  }
-
-  hideTown() {
-    this.town = null;
-    const element = this.part("town");
-    if (!element) return;
-    element.hidden = true;
-    element.innerHTML = "";
   }
 
   dispose() {
