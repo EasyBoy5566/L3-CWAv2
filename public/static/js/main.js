@@ -7,6 +7,7 @@ import { createGlobe } from "./globe.js";
 import { renderFreshness } from "./header.js";
 import { RegionView, townBody, townHead } from "./panel.js";
 import { SECTIONS, TownData } from "./town-data.js";
+import { Ticker } from "./ticker.js";
 import { TyphoonCard } from "./typhoon.js";
 import { MISSING, colorAt, renderLegend, scaleFor } from "./scale.js";
 
@@ -267,12 +268,28 @@ $("overlays").addEventListener("change", async (event) => {
 });
 
 // ---------- 3D: buildings and the shadow simulation ----------
+// With 建築模型 on, the top bar's middle is the sun clock; otherwise it is
+// the weather ticker. Turning the buildings off also stops the simulation
+// and returns the sun to now.
+function syncSimMode() {
+  const on = $("buildings").checked;
+  if (document.body.classList.contains("sim-mode") === on) return;
+  document.body.classList.toggle("sim-mode", on);
+  if (on) return;
+  setPlaying(false);
+  stopSimulation();
+  syncSliderToNow();
+  state.globe?.setTime(null);
+}
+
 $("buildings").addEventListener("change", async (event) => {
   const on = event.target.checked;
+  syncSimMode();
   try {
     await state.globe?.setBuildings(on);
   } catch (error) {
     event.target.checked = false;
+    syncSimMode();
     $("buildings-note").textContent = error.message;
   }
 });
@@ -294,6 +311,7 @@ $("sim-cities").addEventListener("click", (event) => {
 async function showCity(city) {
   if (!state.globe?.hasTerrain) return;
   $("buildings").checked = true;
+  syncSimMode();
   if (state.region) closeRegion();
   await state.globe.showCity(city);
 }
@@ -304,6 +322,7 @@ async function startSimulation() {
   if (!state.globe?.hasTerrain || state.simulating) return;
   state.simulating = true;
   $("buildings").checked = true;
+  syncSimMode();
   if (state.region) closeRegion();
   await state.globe.startShadowSimulation(state.simCity);
   setClock(7 * 60);
@@ -604,6 +623,28 @@ function showError(error) {
   element.insertAdjacentHTML("beforeend", `<span class="badge alert load-error" title="${escapeHtml(error.message)}">資料載入失敗：${escapeHtml(error.message)}</span>`);
 }
 
+// ---------- the weather ticker ----------
+const ticker = new Ticker($("ticker"), {
+  onPick: (alert) => {
+    if (alert.category === "typhoon") {
+      const input = document.querySelector('input[data-overlay="typhoon"]');
+      if (!input.checked) {
+        input.checked = true;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      return;
+    }
+    if (alert.counties?.length) openRegion(alert.counties[0]);
+  },
+});
+async function loadAlerts() {
+  try {
+    ticker.set((await getJSON("/api/alerts")).alerts);
+  } catch {
+    // Keeps the last alerts; the next poll retries.
+  }
+}
+
 // ---------- polling ----------
 async function poll() {
   if (document.hidden) return;
@@ -616,6 +657,7 @@ async function poll() {
       await loadLayer();
       await state.view?.refresh();
     }
+    loadAlerts();
     if (state.globe) {
       const statuses = await state.globe.refreshOverlays();
       for (const [name, status] of Object.entries(statuses)) setOverlayStatus(name, status);
@@ -634,6 +676,7 @@ async function poll() {
 async function start() {
   syncSliderToNow();
   refract();
+  loadAlerts();
   const metaLoaded = loadMeta().then((stamp) => {
     state.dataStamp = stamp;
     renderFallbackTiles();

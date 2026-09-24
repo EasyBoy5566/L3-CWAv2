@@ -16,7 +16,7 @@
       window.__early[url].catch(() => {});
     }
   </script>
-  {% for module in ["main", "api", "format", "glass", "globe", "header", "panel", "town-data", "scale", "standees", "geo", "overlays", "cyclone", "typhoon", "charts", "icons"] %}
+  {% for module in ["main", "api", "format", "glass", "globe", "header", "panel", "town-data", "scale", "standees", "ticker", "geo", "overlays", "cyclone", "typhoon", "charts", "icons"] %}
   <link rel="modulepreload" href="{{ url_for('static', filename='js/' ~ module ~ '.js') }}">
   {% endfor %}
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/cesium-1.145.0/Widgets/widgets.css') }}">
@@ -29,12 +29,16 @@
       <button type="button" class="icon-btn" id="date-next" aria-label="後一天">›</button>
     </div>
     <span class="divider" aria-hidden="true"></span>
+    <!-- One slot: the weather ticker, or the sun clock while 建築模型 is on. -->
+    <div class="bar-slot">
+    <div class="ticker" id="ticker" role="region" aria-label="天氣提醒"></div>
     <div class="clock">
       <button type="button" class="icon-btn" id="clock-play" aria-pressed="false" aria-label="播放一天的日照與建築陰影" title="播放一天的日照與建築陰影">▶</button>
       <span class="clock-icon" id="clock-icon" aria-hidden="true">☾</span>
       <input type="range" id="clock" min="0" max="1439" step="10" aria-label="日照模擬時間">
       <output id="clock-label" for="clock">現在</output>
       <button type="button" class="now-btn" id="clock-now" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8a4.8 4.8 0 1 0 1.5-3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4.4 1.9v2.9h2.9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>回到現在</button>
+    </div>
     </div>
     <span class="divider" aria-hidden="true"></span>
     <button type="button" class="icon-btn text view-btn" id="mode" aria-pressed="false" title="切換 2D／3D" aria-label="2D 檢視">2D</button>
