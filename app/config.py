@@ -44,6 +44,9 @@ OBSERVATION_REFRESH_AFTER = 15
 OBSERVATION_WARN_AFTER = 30
 OBSERVATION_ALERT_AFTER = 120
 FORECAST_WARN_AFTER = 12 * 60
+# The hourly cron checks forecasts; if it has not for this long, the next
+# visitor's page load checks them instead (see freshness.py).
+FORECAST_REFRESH_AFTER = 60
 
 # Stations above this altitude are left out of a county's current value, so
 # Yushan and Alishan do not drag Nantou and Chiayi down by ten degrees.

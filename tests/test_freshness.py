@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from app import config
-from app.freshness import refresh_observations_if_stale
+from app.freshness import refresh_forecasts_if_stale, refresh_observations_if_stale
 from tests.conftest import FROZEN
 
 
@@ -23,4 +23,26 @@ def test_no_refetch_while_fresh(loaded, cwa):
     loaded.execute("UPDATE JobStatus SET dataTime = ?, lastSuccessAt = ? WHERE job = 'observations'",
                    ((FROZEN - timedelta(minutes=5)).isoformat(), (FROZEN - timedelta(hours=1)).isoformat()))
     assert refresh_observations_if_stale(loaded) is False
+    assert cwa.calls == []
+
+
+def test_forecasts_not_rechecked_within_the_hour(loaded, cwa, clock):
+    clock(FROZEN + timedelta(minutes=config.FORECAST_REFRESH_AFTER - 5))
+    assert refresh_forecasts_if_stale(loaded) is False
+    assert cwa.calls == []
+
+
+def test_forecasts_rechecked_once_the_cron_has_missed_an_hour(loaded, cwa, clock):
+    clock(FROZEN + timedelta(minutes=config.FORECAST_REFRESH_AFTER + 5))
+    assert refresh_forecasts_if_stale(loaded) is True
+    assert config.FORECAST_3DAY_DATASET in cwa.calls
+    assert config.FORECAST_WEEK_DATASET in cwa.calls
+
+
+def test_failed_forecast_check_not_retried_at_once(loaded, cwa, clock):
+    later = FROZEN + timedelta(hours=3)
+    loaded.execute("UPDATE JobStatus SET lastAttemptAt = ? WHERE job = 'forecasts'",
+                   ((later - timedelta(minutes=2)).isoformat(),))
+    clock(later)
+    assert refresh_forecasts_if_stale(loaded) is False
     assert cwa.calls == []

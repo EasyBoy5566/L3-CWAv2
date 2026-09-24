@@ -2,7 +2,7 @@
 import { getJSON } from "./api.js";
 import { loadECharts } from "./charts.js";
 import { dayLabel, escapeHtml, hhmm, num } from "./format.js";
-import { GlassSelect, Segmented, prefersReducedMotion, refract, setSky, springEasing } from "./glass.js";
+import { GlassSelect, Segmented, prefersReducedMotion, refract, revealInline, setSky, springEasing } from "./glass.js";
 import { createGlobe } from "./globe.js";
 import { renderFreshness } from "./header.js";
 import { RegionView } from "./panel.js";
@@ -424,7 +424,7 @@ function syncSliderToNow() {
   const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date()).split(":");
   $("clock").value = Number(parts[0]) * 60 + Number(parts[1]);
   $("clock-label").textContent = "現在";
-  $("clock-now").hidden = true;
+  revealInline($("clock-now"), false);
   state.simulated = null;
   applySky(new Date());
 }
@@ -433,7 +433,7 @@ $("clock").addEventListener("input", (event) => {
   const date = sliderToDate(Number(event.target.value));
   state.simulated = date;
   $("clock-label").textContent = hhmm(date.toISOString());
-  $("clock-now").hidden = false;
+  revealInline($("clock-now"), true);
   applySky(date);
   state.globe?.setTime(date);
 });

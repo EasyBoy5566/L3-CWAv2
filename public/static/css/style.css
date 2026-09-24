@@ -125,7 +125,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
 }
-/* Sheen: light pooling at the top of the lens, and a soft glow under the pointer. */
+/* Sheen: light pooling at the top of the lens. */
 .glass::after {
   content: "";
   position: absolute;
@@ -134,7 +134,6 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   border-radius: inherit;
   pointer-events: none;
   background:
-    radial-gradient(260px circle at var(--lx, 50%) var(--ly, -400px), rgb(255 255 255 / calc(0.16 * var(--light))), transparent 70%),
     radial-gradient(140% 70% at 18% -10%, var(--sheen), transparent 55%),
     radial-gradient(90% 50% at 100% 110%, rgba(255, 255, 255, 0.08), transparent 60%);
 }
@@ -1076,6 +1075,7 @@ body.page-region { background: transparent; }
 .now-btn:hover svg { animation: now-spin 0.5s var(--ease); }
 .now-btn:active { transform: scale(0.95); }
 .now-btn[hidden] { display: none; }
+#clock-now { animation: none; }
 .now-btn.is-live { cursor: default; border-color: var(--inner-line); background: var(--inner); color: var(--muted); padding-left: 12px; }
 .now-btn.is-live i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 var(--ok); animation: live 2s ease-out infinite; }
 @keyframes now-in { from { opacity: 0; transform: scale(0.9); } }

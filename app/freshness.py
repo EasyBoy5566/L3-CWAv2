@@ -1,8 +1,9 @@
-"""How old the data is, and the read-through refresh for observations.
+"""How old the data is, and the read-through refresh for observations and forecasts.
 
-The cron job is the primary refresh. If it has not run for a while, the
-next visitor's request fetches observations itself, under the same lock,
-so the page never shows a reading much older than CWA's own.
+The cron jobs are the primary refresh. If they have not run for a while, the
+next visitor's request fetches the data itself, under the same lock, so the
+page never shows a reading much older than CWA's own, nor a forecast that
+nobody has checked for hours.
 """
 
 from datetime import datetime
@@ -16,6 +17,8 @@ RETRY_AFTER_MINUTES = 2
 # right after a successful fetch the newest reading can already look stale.
 # Fetching again before the next slot could exist only makes the visitor wait.
 FETCHED_WITHIN_MINUTES = 10
+# A failed forecast check is not retried on every page load either.
+FORECAST_RETRY_AFTER_MINUTES = 10
 
 
 def _minutes_since(value: str | None, now: datetime) -> float | None:
@@ -88,5 +91,24 @@ def refresh_observations_if_stale(database) -> bool:
 
     try:
         return run_job("observations", database, timeout=config.READ_THROUGH_TIMEOUT)["status"] == "ok"
+    except WeatherError:
+        return False
+
+
+def refresh_forecasts_if_stale(database) -> bool:
+    """Check CWA's forecasts inline when no run has for an hour. Never raises; returns whether it ran."""
+    now = config.now()
+    rows = database.query("SELECT lastAttemptAt, lastSuccessAt FROM JobStatus WHERE job = 'forecasts'")
+    if rows:
+        since_success = _minutes_since(rows[0]["lastSuccessAt"], now)
+        since_attempt = _minutes_since(rows[0]["lastAttemptAt"], now)
+        if since_success is not None and since_success <= config.FORECAST_REFRESH_AFTER:
+            return False
+        if since_attempt is not None and since_attempt < FORECAST_RETRY_AFTER_MINUTES:
+            return False
+    from etl.jobs import run_job
+
+    try:
+        return run_job("forecasts", database, timeout=config.READ_THROUGH_TIMEOUT)["status"] in ("ok", "unchanged")
     except WeatherError:
         return False

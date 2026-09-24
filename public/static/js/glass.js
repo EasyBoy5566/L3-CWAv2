@@ -217,9 +217,8 @@ export function refreshRefraction() {
 }
 
 // ---------------------------------------------------------------------------
-// Pointer light. The glass under the pointer catches it: a soft glow follows
-// the pointer across the surface and the rim lights up nearest to it (the
-// CSS reads --lx, --ly and --light, see .glass::before and ::after).
+// Pointer light. The glass under the pointer catches it on its rim, brightest
+// nearest the pointer (the CSS reads --lx, --ly and --light, see .glass::before).
 
 let lit = null;
 let pointer = null;
@@ -252,6 +251,46 @@ export const springEasing = (name = "spring") => {
   const value = getComputedStyle(document.documentElement).getPropertyValue(`--${name}`).trim();
   return value && CSS.supports("transition-timing-function", value) ? value : "cubic-bezier(.3, .7, .2, 1)";
 };
+
+/**
+ * Show or hide an item in a row without shoving its neighbours: its width,
+ * padding and the gap before it grow from nothing on a spring (or shrink
+ * away), so the items beside it glide over instead of jumping.
+ */
+export function revealInline(element, show) {
+  const shown = !element.hidden && !element.dataset.leaving;
+  if (show === shown) return;
+  for (const animation of element.getAnimations()) animation.cancel();
+  delete element.dataset.leaving;
+  if (reducedMotion.matches) {
+    element.hidden = !show;
+    return;
+  }
+  element.hidden = false;
+  const style = getComputedStyle(element);
+  const gap = parseFloat(getComputedStyle(element.parentElement).columnGap) || 0;
+  const open = {
+    width: `${element.offsetWidth}px`, paddingLeft: style.paddingLeft, paddingRight: style.paddingRight,
+    borderWidth: style.borderTopWidth, marginLeft: "0px", opacity: 1, transform: "scale(1)",
+  };
+  const closed = {
+    width: "0px", paddingLeft: "0px", paddingRight: "0px", borderWidth: "0px",
+    marginLeft: `${-gap}px`, opacity: 0, transform: "scale(0.6)",
+  };
+  element.style.overflow = "hidden";
+  const done = () => { element.style.overflow = ""; };
+  if (show) {
+    element.animate([closed, open], { duration: 620, easing: springEasing("spring-soft") }).finished.then(done, () => {});
+    return;
+  }
+  element.dataset.leaving = "1";
+  element.animate([open, closed], { duration: 340, easing: "cubic-bezier(.4, 0, .2, 1)", fill: "forwards" }).finished.then(() => {
+    element.hidden = true;
+    delete element.dataset.leaving;
+    for (const animation of element.getAnimations()) animation.cancel();
+    done();
+  }, () => {});
+}
 
 // ---------------------------------------------------------------------------
 // Liquid segmented control. The highlight stretches across the old and new

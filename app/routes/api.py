@@ -59,6 +59,9 @@ def weather_error(error):
 @bp.get("/meta")
 def meta():
     database = get_database()
+    # Every page load asks for meta first; its edge cache revalidates in the
+    # background, so the visitor rarely waits on this check.
+    freshness.refresh_forecasts_if_stale(database)
     return _cached({
         "counties": queries.counties(),
         "dates": queries.forecast_dates(database),
