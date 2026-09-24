@@ -82,7 +82,41 @@ function canvasLayer(viewer, canvas, bounds, index) {
     rectangle: Cesium.Rectangle.fromDegrees(bounds.west, bounds.south, bounds.east, bounds.north),
   });
   provider._image = canvas;
-  return viewer.imageryLayers.addImageryProvider(provider, index);
+  const layer = viewer.imageryLayers.addImageryProvider(provider, index);
+  releaseWhenUploaded(viewer, layer, provider, canvas);
+  return layer;
+}
+
+// Once Cesium has made its texture from a raster, the canvas is a second
+// full copy (~70 MB for the 4096 one). It is swapped for a PNG of itself,
+// which the browser may drop from memory and decode again should Cesium ever
+// ask for the image anew, and the canvas is emptied.
+function releaseWhenUploaded(viewer, layer, provider, canvas) {
+  const check = () => {
+    if (layer.isDestroyed()) {
+      viewer.scene.postRender.removeEventListener(check);
+      return;
+    }
+    const uploaded = Object.values(layer._imageryCache ?? {}).some((imagery) => imagery.texture);
+    if (!uploaded) return;
+    viewer.scene.postRender.removeEventListener(check);
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const image = new Image();
+      image.src = URL.createObjectURL(blob);
+      // Loaded, not decoded: it stays a compressed PNG unless Cesium uses it.
+      const loaded = await new Promise((resolve) => {
+        image.onload = () => resolve(true);
+        image.onerror = () => resolve(false);
+      });
+      URL.revokeObjectURL(image.src); // the loaded image keeps its data
+      if (!loaded) return; // keep the canvas
+      provider._image = image;
+      canvas.width = 0;
+      canvas.height = 0;
+    }, "image/png");
+  };
+  viewer.scene.postRender.addEventListener(check);
 }
 
 function haversine(lon1, lat1, lon2, lat2) {
@@ -124,9 +158,20 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     // frame per simulated minute keeps it smooth.
     requestRenderMode: true,
     maximumRenderTimeChange: 60,
+    // What Cesium holds before a single tile loads was ~340 MB, most of it
+    // full-screen buffers. Measured on a bare viewer:
     // 4x multisampling held about 90 MB of framebuffer for edges 2x draws
     // nearly as well.
     msaaSamples: 2,
+    // The canvas's own antialiasing doubled that for nothing: Cesium draws
+    // into its multisampled framebuffer and only copies the result out (~70 MB).
+    contextOptions: { webgl: { antialias: false } },
+    // Order-independent translucency keeps several full-screen buffers
+    // (~60 MB) for overlapping see-through shapes this map barely has.
+    orderIndependentTranslucency: false,
+    // The star box is six 1024-pixel textures (~60 MB) for sky the views
+    // here hardly show; space is the page's night blue instead.
+    skyBox: false,
   };
   const baseLayer = imagery(token);
   if (baseLayer) options.baseLayer = baseLayer;
@@ -139,8 +184,12 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   scene.globe.enableLighting = true;
   scene.globe.dynamicAtmosphereLighting = true;
   scene.globe.dynamicAtmosphereLightingFromSun = true;
+  // Without a sky box the viewer makes no sun or moon either.
+  scene.sun ??= new Cesium.Sun();
+  scene.moon ??= new Cesium.Moon();
   scene.moon.show = true;
   scene.sun.show = true;
+  scene.backgroundColor = Cesium.Color.fromCssColorString("#070b18");
   viewer.shadowMap.softShadows = true;
   viewer.shadowMap.size = 2048;
   // At Cesium's default bias (2e-5) the buildings shadow themselves: every lit
