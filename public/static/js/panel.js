@@ -168,10 +168,13 @@ export function townBody(data) {
 }
 
 export class RegionView {
-  constructor(container, name, { mode = "drawer" } = {}) {
+  // onSummary({ name, temperature, condition, icon }): the county in one line,
+  // for its folded card.
+  constructor(container, name, { mode = "drawer", onSummary } = {}) {
     this.container = container;
     this.name = name;
     this.mode = mode;
+    this.onSummary = onSummary;
     this.charts = new ChartSet();
     this.aborter = new AbortController();
   }
@@ -254,6 +257,7 @@ export class RegionView {
     if (compact) {
       compact.innerHTML = `<div class="bar"><b>${escapeHtml(name)}</b><span>${temperature === null ? "—" : Math.round(temperature)}° ｜ ${escapeHtml(condition)}</span></div>`;
     }
+    this.onSummary?.({ name, temperature, condition, icon: weatherIcon(kind, { night, size: 22 }) });
   }
 
   renderHourly({ hourly, current }) {

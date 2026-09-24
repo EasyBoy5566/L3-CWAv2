@@ -79,50 +79,26 @@ function applyLayer() {
 }
 
 // ---------- panel ----------
-// The panel grows out of the point that was clicked, as a circle of glass
-// widening to fill the sheet.
-function revealPanel(origin) {
-  const panel = $("panel");
-  const opening = panel.hidden;
-  panel.hidden = false;
+// The county card springs open from nothing; picking another county while it
+// is open fades the new county's weather in.
+function revealPanel() {
+  const opening = countyCard.hidden || Boolean(countyCard.dataset.closing);
   document.body.classList.add("panel-open");
-  if (prefersReducedMotion()) return;
   if (!opening) {
+    if (prefersReducedMotion()) return;
     $("panel-body").classList.remove("swapping");
     void $("panel-body").offsetWidth;
     $("panel-body").classList.add("swapping");
     return;
   }
-  const rect = panel.getBoundingClientRect();
-  const x = origin ? origin.x - rect.left : rect.width - 40;
-  const y = origin ? origin.y - rect.top : 40;
-  const reach = Math.hypot(Math.max(x, rect.width - x), Math.max(y, rect.height - y)) + 40;
-  panel.animate(
-    [
-      { clipPath: `circle(18px at ${x}px ${y}px)`, opacity: 0.3, transform: "scale(0.92)" },
-      { clipPath: `circle(${reach}px at ${x}px ${y}px)`, opacity: 1, transform: "scale(1)" },
-    ],
-    { duration: 760, easing: springEasing("spring-soft") },
-  );
+  delete countyCard.dataset.closing;
+  countyCard.hidden = false;
+  springHeight(countyCard, 0, "spring", 720);
 }
 
 function hidePanel() {
-  const panel = $("panel");
   document.body.classList.remove("panel-open");
-  if (panel.hidden) return;
-  if (prefersReducedMotion()) {
-    panel.hidden = true;
-    return;
-  }
-  const rect = panel.getBoundingClientRect();
-  const animation = panel.animate(
-    [
-      { clipPath: `circle(${Math.hypot(rect.width, rect.height)}px at ${rect.width - 34}px 34px)`, opacity: 1 },
-      { clipPath: `circle(16px at ${rect.width - 34}px 34px)`, opacity: 0 },
-    ],
-    { duration: 380, easing: "cubic-bezier(.4, 0, .6, 1)" },
-  );
-  animation.onfinish = () => { if (!state.region) panel.hidden = true; };
+  springAway(countyCard, () => Boolean(state.region));
 }
 
 const regionUrl = (county, town) => `/?${new URLSearchParams(town ? { region: county, town: town.town } : { region: county })}`;
@@ -141,10 +117,11 @@ function openRegion(name, { push = true, fly = true, origin = null, town = null 
   if (state.region !== name) {
     state.view?.dispose();
     state.region = name;
-    state.view = new RegionView($("panel-body"), name, { mode: "drawer" });
+    $("county-peek").innerHTML = `<b>${escapeHtml(name)}</b>`;
+    state.view = new RegionView($("panel-body"), name, { mode: "drawer", onSummary: countySummary });
     state.view.load();
   }
-  revealPanel(origin);
+  revealPanel();
   setCounty(name);
   showTown(town);
   // A county flies in; a township is brought to the centre of the visible map,
@@ -353,26 +330,26 @@ $("fallback").addEventListener("click", (event) => {
   if (tile) openRegion(tile.dataset.name, { origin: { x: event.clientX, y: event.clientY } });
 });
 
-// ---------- the left column: the controls and a township's card ----------
-// Both cards change height on a spring (springHeight). Their glass follows
-// every frame (stretchRefraction), for the one springing and for the one it
-// pushes or squeezes: the column is a flex column, so the controls unfolding
-// moves and may shorten the township card below.
-const leftCards = () => [...document.querySelectorAll(".left-stack > .glass:not([hidden])")];
+// ---------- the side cards ----------
+// On the left the controls; on the right the county's weather with a
+// township's under it. Every card changes height on a spring (springHeight)
+// and its glass follows every frame (stretchRefraction), for the card that
+// springs and for the one it pushes or squeezes: each side is a flex column.
+const sideCards = () => [...document.querySelectorAll(".left-stack > .glass:not([hidden]), .right-stack > .glass:not([hidden])")];
+const isHeightAnimation = (a) => a.effect?.getKeyframes?.().some((k) => "height" in k);
 let following = 0;
-function followLeftCards() {
-  for (const card of leftCards()) card.classList.add("morphing");
+function followCards() {
+  for (const card of sideCards()) card.classList.add("morphing");
   if (following) return;
   const step = () => {
-    const cards = leftCards();
+    const cards = sideCards();
     for (const card of cards) stretchRefraction(card, card.offsetHeight);
-    const moving = cards.some((card) => card.getAnimations().some((a) => a.playState === "running" && a.effect?.getKeyframes?.().some((k) => "height" in k)));
-    if (moving) {
+    if (cards.some((card) => card.getAnimations().some((a) => a.playState === "running" && isHeightAnimation(a)))) {
       following = requestAnimationFrame(step);
       return;
     }
     following = 0;
-    for (const card of document.querySelectorAll(".left-stack > .glass")) {
+    for (const card of document.querySelectorAll(".left-stack > .glass, .right-stack > .glass")) {
       card.classList.remove("morphing");
       if (!card.hidden) ensureRefraction(card);
     }
@@ -382,7 +359,7 @@ function followLeftCards() {
 // Spring `card` from the height it had (`from`, measured before the change)
 // to the height it has now.
 function springHeight(card, from, easing = "spring", duration = 700) {
-  for (const animation of card.getAnimations()) if (animation.effect?.getKeyframes?.().some((k) => "height" in k)) animation.cancel();
+  for (const animation of card.getAnimations()) if (isHeightAnimation(animation)) animation.cancel();
   const to = card.offsetHeight;
   if (!prefersReducedMotion() && Math.abs(to - from) > 1) {
     card.animate(
@@ -390,24 +367,88 @@ function springHeight(card, from, easing = "spring", duration = 700) {
       { duration, easing: springEasing(easing) },
     );
   }
-  followLeftCards();
+  followCards();
+}
+// Shrink `card` away and hide it; `stillWanted()` is asked at the end, in
+// case it was reopened meanwhile.
+function springAway(card, stillWanted) {
+  if (card.hidden || card.dataset.closing) return;
+  card.dataset.closing = "1";
+  const from = card.offsetHeight;
+  for (const animation of card.getAnimations()) if (isHeightAnimation(animation)) animation.cancel();
+  const done = () => {
+    delete card.dataset.closing;
+    if (!stillWanted()) card.hidden = true;
+  };
+  if (prefersReducedMotion()) return done();
+  const animation = card.animate(
+    [{ height: `${from}px`, minHeight: "0px", opacity: 1, overflow: "hidden" }, { height: "0px", minHeight: "0px", opacity: 0, overflow: "hidden" }],
+    { duration: 300, easing: "cubic-bezier(.4, 0, .6, 1)" },
+  );
+  followCards();
+  animation.finished.then(() => {
+    done();
+    animation.cancel();
+  }, () => {});
+}
+
+// The right column is an accordion: the county card or the township card is
+// open, the other folded to its header. A township picked opens its card
+// and folds the county's; a county picked opens the county's. Resting the
+// pointer on a folded card (or tapping its header) opens that one instead.
+const countyCard = $("panel");
+const townCard = $("town-card");
+refract(townCard);
+function focusCard(which) {
+  const townOn = !townCard.hidden && !townCard.dataset.closing;
+  const foldCounty = which === "town" && townOn;
+  const foldTown = which === "county";
+  if (countyCard.classList.contains("collapsed") === foldCounty && townCard.classList.contains("collapsed") === foldTown) return;
+  const cards = [countyCard, townCard].filter((card) => !card.hidden && !card.dataset.closing);
+  const from = new Map(cards.map((card) => [card, card.offsetHeight]));
+  countyCard.classList.toggle("collapsed", foldCounty);
+  townCard.classList.toggle("collapsed", foldTown);
+  for (const card of cards) springHeight(card, from.get(card), "spring", 650);
+}
+for (const [card, which] of [[countyCard, "county"], [townCard, "town"]]) {
+  let timer = 0;
+  // A short rest first, so passing over it on the way elsewhere does not flip them.
+  card.addEventListener("pointerenter", () => {
+    if (!card.classList.contains("collapsed")) return;
+    timer = setTimeout(() => focusCard(which), 160);
+  });
+  card.addEventListener("pointerleave", () => clearTimeout(timer));
+}
+$("county-peek").addEventListener("click", () => focusCard("county"));
+$("town-peek").addEventListener("click", () => focusCard("town"));
+
+// The county card's folded header, from its view.
+function countySummary({ name, temperature, condition, icon }) {
+  $("county-peek").innerHTML = `<b>${escapeHtml(name)}</b><span class="peek-temp">${temperature === null ? "—" : Math.round(temperature)}°</span>${icon}<span class="peek-cond">${escapeHtml(condition)}</span>`;
 }
 
 // The township card: its header at once, then its data; each change springs.
-const townCard = $("town-card");
-refract(townCard);
 let townShown = null;
+function townPeek(town, forecast = null) {
+  $("town-peek").innerHTML = `<span class="scope-tag">鄉鎮</span><b>${escapeHtml(town.town)}</b>${forecast ? `<span class="peek-temp">${Math.round(forecast.t)}°</span><span class="peek-cond">${escapeHtml(forecast.wx ?? "")}</span>` : ""}`;
+}
 async function openTownCard(town) {
-  const opening = townCard.hidden || townCard.dataset.closing;
-  const from = opening ? 0 : townCard.offsetHeight;
+  const opening = townCard.hidden || Boolean(townCard.dataset.closing);
+  const countyFrom = countyCard.hidden ? 0 : countyCard.offsetHeight;
+  const townFrom = opening ? 0 : townCard.offsetHeight;
   delete townCard.dataset.closing;
   townShown = town;
   townCard.hidden = false;
+  townPeek(town);
   $("town-content").innerHTML = `${townHead(town)}<div class="skeleton"></div>`;
   $("town-content").scrollTop = 0;
-  springHeight(townCard, from, "spring", 700);
+  countyCard.classList.add("collapsed");
+  townCard.classList.remove("collapsed");
+  if (!countyCard.hidden) springHeight(countyCard, countyFrom, "spring", 650);
+  springHeight(townCard, townFrom, "spring", 700);
   const data = await townData.forTown(town, ALL_SECTIONS);
   if (townShown !== town) return; // another township was picked meanwhile
+  townPeek(town, data.forecast?.row);
   const before = townCard.offsetHeight;
   $("town-content").innerHTML = `${townHead(town)}${townBody(data)}`;
   springHeight(townCard, before, "spring-soft", 560);
@@ -415,25 +456,16 @@ async function openTownCard(town) {
 function closeTownCard() {
   townShown = null;
   if (townCard.hidden || townCard.dataset.closing) return;
-  townCard.dataset.closing = "1";
-  const from = townCard.offsetHeight;
-  for (const animation of townCard.getAnimations()) animation.cancel();
-  if (prefersReducedMotion()) {
-    townCard.hidden = true;
-    delete townCard.dataset.closing;
+  // The county's card opens again as the township's goes, unless the county
+  // is going too (its region closed).
+  if (state.region && !countyCard.hidden && !countyCard.dataset.closing && countyCard.classList.contains("collapsed")) {
+    const from = countyCard.offsetHeight;
+    countyCard.classList.remove("collapsed");
+    springAway(townCard, () => townShown !== null);
+    springHeight(countyCard, from, "spring", 650);
     return;
   }
-  const animation = townCard.animate(
-    [{ height: `${from}px`, minHeight: "0px", opacity: 1, overflow: "hidden" }, { height: "0px", minHeight: "0px", opacity: 0, overflow: "hidden" }],
-    { duration: 300, easing: "cubic-bezier(.4, 0, .6, 1)" },
-  );
-  followLeftCards();
-  animation.finished.then(() => {
-    if (!townCard.dataset.closing) return; // reopened meanwhile
-    delete townCard.dataset.closing;
-    townCard.hidden = true;
-    animation.cancel();
-  }, () => {});
+  springAway(townCard, () => townShown !== null);
 }
 // Closing the township card keeps its county open.
 townCard.querySelector(".town-close").addEventListener("click", () => {

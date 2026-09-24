@@ -465,13 +465,25 @@ input[type="range"]::-moz-range-thumb {
 .tile strong { display: block; font-size: 22px; }
 
 /* ---------- panel: a floating sheet ---------- */
-.panel {
+/* The right column: the county's card, and under it a township's. The open
+   one takes the room; the other folds to a header (main.js focusCard). */
+.right-stack {
   position: absolute;
   z-index: 25;
   top: var(--top);
   right: 12px;
   bottom: 16px;
   width: var(--panel-w);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: none;
+}
+.right-stack > * { pointer-events: auto; }
+.panel {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
   --radius: 30px;
   display: flex;
   flex-direction: column;
@@ -1199,7 +1211,7 @@ body.page-region { background: transparent; }
 @media (prefers-reduced-motion: reduce) { .ty-symbol { animation: none; } }
 
 /* ---------- a township's card, in the left column ---------- */
-.town-panel { flex: 0 1 auto; min-height: 120px; display: flex; flex-direction: column; --radius: 26px; overflow: hidden; }
+.town-panel { position: relative; flex: 0 1 auto; min-height: 120px; display: flex; flex-direction: column; --radius: 26px; overflow: hidden; }
 .town-panel[hidden] { display: none; }
 .town-close { position: absolute; top: 10px; right: 10px; z-index: 3; font-size: 20px; }
 .town-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: none; display: grid; gap: 14px; align-content: start; padding: 0 14px 16px; }
@@ -1284,3 +1296,29 @@ body.sim-mode .bar-slot .ticker { opacity: 0; translate: 0 -10px; visibility: hi
 .ticker-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ticker-count { flex: none; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
 @media (max-width: 1300px) { .bar-slot { width: 380px; } }
+
+/* ---------- folded cards: a one-line header ---------- */
+.card-peek { display: none; }
+.right-stack > .collapsed { flex: 0 0 auto; min-height: 0; }
+.right-stack > .collapsed .panel-body,
+.right-stack > .collapsed .town-scroll { display: none; }
+.right-stack > .collapsed .card-peek {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 54px;
+  padding: 0 48px 0 16px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.card-peek b { font-size: 16px; font-weight: 600; letter-spacing: 0.03em; white-space: nowrap; }
+.card-peek .peek-temp { font-size: 16px; font-weight: 300; font-variant-numeric: tabular-nums; }
+.card-peek .peek-cond { overflow: hidden; font-size: 12.5px; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.card-peek .wx-icon { flex: none; width: 20px; height: 20px; }
+.right-stack > .collapsed .panel-close,
+.right-stack > .collapsed .town-close { top: 10px; }
