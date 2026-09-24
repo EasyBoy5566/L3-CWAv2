@@ -2,7 +2,8 @@
 //
 // They are HTML, not Cesium labels. After every frame each anchor (a ground
 // point, lifted by the exaggerated terrain height) is projected to the
-// screen, and every county on screen gets its bubble.
+// screen, and every county whose point can be seen gets its bubble: one
+// off screen, or under the floating chrome, gets none.
 //
 // Where each bubble goes is worked out only when the view settles (the camera
 // stops, a panel opens, the values or the window change). Nearest the island's
@@ -27,14 +28,16 @@ const OBSTACLES = ".topbar, .controls, .panel:not([hidden]), .typhoon-card:not([
 const SVG_NS = "http://www.w3.org/2000/svg";
 // A bubble sits this far above its county's point when it has room there.
 const LIFT = 8;
+// How far inside the map (clear of edges and panels) a county's point must be for its bubble to show.
+const EDGE = 12;
 // The main island's spine, north tip to south tip; displaced bubbles move away from it.
 const SPINE = [{ lon: 121.54, lat: 25.29 }, { lon: 120.84, lat: 21.9 }];
 // Out along the ray away from the spine: distances from the county in
 // pixels, and turns off the ray in degrees, alternating either side.
 const REACH = [34, 52, 72, 96, 124, 156, 192];
 const TURNS = [0, 18, -18, 36, -36, 56, -56, 80, -80];
-// Only when nothing out to sea is free (a county under a panel, say): the
-// rest of the way round, and further.
+// Only when nothing out to sea is free (a county near the screen's edge,
+// say): the rest of the way round, and further.
 const LAST_REACH = [...REACH, 240, 300];
 const LAST_TURNS = [105, -105, 130, -130, 155, -155, 180];
 // How long a bubble takes to glide to a new place.
@@ -241,7 +244,11 @@ export class Bubbles {
       const screen = this.scene.mode === Cesium.SceneMode.SCENE3D && !occluder.isPointVisible(world)
         ? undefined
         : this.toWindow(this.scene, world);
-      if (screen && screen.x >= 0 && screen.y >= 0 && screen.x <= width && screen.y <= height) points.set(name, { x: screen.x, y: screen.y });
+      // Seen means clear of the screen's edges and of the chrome by a margin:
+      // the sliver above the top bar does not count as map.
+      const seen = screen && screen.x >= EDGE && screen.y >= EDGE && screen.x <= width - EDGE && screen.y <= height - EDGE
+        && !chrome.some((r) => screen.x >= r.x - EDGE && screen.x <= r.x + r.w + EDGE && screen.y >= r.y - EDGE && screen.y <= r.y + r.h + EDGE);
+      if (seen) points.set(name, { x: screen.x, y: screen.y });
     }
 
     // ---- places ----
