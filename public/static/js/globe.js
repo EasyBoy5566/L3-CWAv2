@@ -455,10 +455,10 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     refreshOverlays: () => dataLayers.refresh(),
 
     typhoons: () => dataLayers.typhoons(),
+    /** When the typhoon's satellite cloud was taken (ISO), or null. */
+    typhoonCloudTime: () => dataLayers.cloudTime(),
     /** Show a marker for cyclone `index` at an interpolated point, or hide it with null. */
     scrubTyphoon: (index, point) => dataLayers.scrub(index, point),
-    /** Taiwan and the whole track of cyclone `index` in one view. */
-    frameTyphoon: (index) => dataLayers.frameCyclone(index),
     flyToTyphoon(lon, lat) {
       viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(lon, lat), 1), {
         offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-58), 2600000),
@@ -513,6 +513,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       sky = next;
       for (const layer of overlays) layer.brightness = OVERLAY_BRIGHTNESS[sky];
       for (const layer of highlightLayers) layer.brightness = HIGHLIGHT_BRIGHTNESS[sky];
+      dataLayers.setBrightness(OVERLAY_BRIGHTNESS[sky]);
       scene.requestRender();
     },
 

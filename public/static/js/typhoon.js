@@ -1,4 +1,4 @@
-// The typhoon card: what the cyclone is now, how far it is from Taiwan, and a
+// The typhoon card: how close the cyclone is to Taiwan, what it is now, and a
 // timeline that walks a marker along its analysed track and its forecast.
 import { beaufortLevel, cycloneClass, directionName, pointAt, timeline } from "./cyclone.js";
 import { escapeHtml } from "./format.js";
@@ -6,14 +6,20 @@ import { escapeHtml } from "./format.js";
 const HOUR = 3600 * 1000;
 const PLAY_STEP_MS = 60; // one hour of the track per frame step
 
+const PLAY = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.2v9.6l7.6-4.8z" fill="currentColor"/></svg>`;
+const PAUSE = `<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="4" y="3.2" width="2.8" height="9.6" rx="1" fill="currentColor"/><rect x="9.2" y="3.2" width="2.8" height="9.6" rx="1" fill="currentColor"/></svg>`;
+// A circular arrow: back to the present.
+const RETURN = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8a4.8 4.8 0 1 0 1.5-3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4.4 1.9v2.9h2.9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
 const num = (value, digits = 0) => (value === null || value === undefined ? "—" : Number(value).toFixed(digits));
 const km = (value) => (value === null || value === undefined ? "—" : Math.round(value).toLocaleString("zh-TW"));
-// A moment in Taipei time as "9/26 08:00".
-const when = (ms) => {
+// A moment in Taipei time as "9/26 08:00" (with minutes, for the satellite).
+const when = (ms, minutes = false) => {
   const d = new Date(ms + 8 * HOUR);
-  return `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${String(d.getUTCHours()).padStart(2, "0")}:00`;
+  const mm = minutes ? String(d.getUTCMinutes()).padStart(2, "0") : "00";
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${String(d.getUTCHours()).padStart(2, "0")}:${mm}`;
 };
-const relative = (hours) => (hours === 0 ? "現在" : hours > 0 ? `預報 +${hours} 小時` : `${-hours} 小時前`);
+const relative = (hours) => (hours === 0 ? "最新定位" : hours > 0 ? `預報 +${hours} 小時` : `${-hours} 小時前`);
 
 export class TyphoonCard {
   constructor(root, { onClose } = {}) {
@@ -73,14 +79,10 @@ export class TyphoonCard {
     if (!button) return;
     if (button.dataset.cyclone !== undefined) this.focus(Number(button.dataset.cyclone));
     else if (button.classList.contains("ty-play")) this.timer ? this.pause() : this.play();
-    else if (button.classList.contains("ty-now")) {
+    else if (button.classList.contains("ty-live")) {
       this.pause();
       this.seek(0);
-    } else if (button.classList.contains("ty-locate")) {
-      const p = pointAt(this.line, this.hours);
-      this.globe?.flyToTyphoon(p.lon, p.lat);
-    } else if (button.classList.contains("ty-frame")) this.globe?.frameTyphoon(this.index);
-    else if (button.classList.contains("ty-close")) {
+    } else if (button.classList.contains("ty-close")) {
       this.hide();
       this.onClose?.();
     }
@@ -101,29 +103,32 @@ export class TyphoonCard {
       ? `<div class="ty-tabs">${this.cyclones.map((c, i) =>
         `<button type="button" class="chip${i === this.index ? " on" : ""}" data-cyclone="${i}">${escapeHtml(c.name ?? "")}</button>`).join("")}</div>`
       : "";
+    const cloud = this.globe?.typhoonCloudTime?.();
+    const sources = [cloud ? `衛星雲圖 ${when(Date.parse(cloud), true)}（向日葵 9 號）` : null, "路徑與預報：中央氣象署"].filter(Boolean);
     this.root.innerHTML = `
       <div class="ty-head">
         <svg class="ty-symbol" viewBox="-32 -32 64 64" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"><circle r="10"/><path d="M0 -10Q19 -10 25 -25M0 10Q-19 10 -25 25"/></g></svg>
-        <div class="ty-title"><b>${escapeHtml(cyclone.name ?? "")}</b><span>${escapeHtml(cyclone.nameEn ?? "")}${cyclone.number ? ` · 第 ${escapeHtml(cyclone.number)} 號` : ""}</span></div>
-        <span class="ty-class"></span>
+        <div class="ty-title">
+          <div><b>${escapeHtml(cyclone.name ?? "")}</b><span class="ty-class"></span></div>
+          <span>${escapeHtml(cyclone.nameEn ?? "")}${cyclone.number ? ` · 第 ${escapeHtml(cyclone.number)} 號` : ""}</span>
+        </div>
         ${tabs}
         <button type="button" class="icon-btn ty-close" aria-label="關閉颱風路徑" title="關閉颱風路徑">×</button>
       </div>
-      <div class="ty-stats"></div>
-      <p class="ty-near"></p>
+      <div class="ty-body">
+        <div class="ty-threat"></div>
+        <div class="ty-stats"></div>
+      </div>
       <div class="ty-time">
-        <button type="button" class="icon-btn ty-play" aria-label="播放颱風路徑" title="播放颱風路徑">▶</button>
+        <button type="button" class="ty-play" aria-label="播放颱風路徑" title="播放颱風路徑">${PLAY}</button>
         <div class="ty-scale">
           <input class="ty-range" type="range" min="${first}" max="${last}" step="1" value="${this.hours}" aria-label="颱風路徑時間" style="--track:${track}">
           <div class="ty-ticks">${ticks}<b class="ty-now-mark" style="left:${at(0)}">現在</b></div>
         </div>
         <output class="ty-when"></output>
+        <button type="button" class="now-btn ty-live"></button>
       </div>
-      <div class="ty-actions">
-        <button type="button" class="chip ty-now">回到現在</button>
-        <button type="button" class="chip ty-locate">定位颱風</button>
-        <button type="button" class="chip ty-frame">臺灣與颱風</button>
-      </div>`;
+      <p class="ty-source">${sources.map(escapeHtml).join(" · ")}</p>`;
     this.seek(this.hours);
   }
 
@@ -137,46 +142,53 @@ export class TyphoonCard {
     $(".ty-range").value = String(hours);
     $(".ty-class").textContent = cls.name;
     $(".ty-when").innerHTML = `<b>${when(p.at ?? this.line.now + hours * HOUR)}</b><span>${relative(hours)}</span>`;
-    $(".ty-now").disabled = hours === 0;
+    // At the latest fix the button is a live marker; anywhere else it brings you back.
+    const live = $(".ty-live");
+    const atNow = hours === 0;
+    live.classList.toggle("is-live", atNow);
+    live.disabled = atNow;
+    live.innerHTML = atNow ? "<i></i>現在" : `${RETURN}回到現在`;
+    live.setAttribute("aria-label", atNow ? "目前顯示最新定位" : "回到最新定位");
     const level = beaufortLevel(p.wind);
     const gustLevel = beaufortLevel(p.gust);
     const stat = (label, value, unit, note = "") =>
-      `<div><small>${label}</small><b>${value}${unit ? `<small>${unit}</small>` : ""}</b>${note ? `<em>${note}</em>` : ""}</div>`;
+      `<div><small>${label}</small><b>${value}${unit ? `<small>${unit}</small>` : ""}</b><em>${note}</em></div>`;
     $(".ty-stats").innerHTML = [
-      stat("中心氣壓", num(p.pressure), "hPa"),
       stat("最大風速", num(p.wind), "m/s", level === null ? "" : `${level} 級`),
       stat("瞬間陣風", num(p.gust), "m/s", gustLevel === null ? "" : `${gustLevel} 級`),
-      stat("七級風暴半徑", num(p.r15), "km", p.r25 ? `十級 ${num(p.r25)} km` : ""),
-      stat("移動", p.dir ? `向${directionName(p.dir)}` : "—", "", p.speed ? `${num(p.speed)} km/h` : ""),
+      stat("中心氣壓", num(p.pressure), "hPa"),
+      stat("七級風暴半徑", num(p.r15), "km"),
+      stat("十級風暴半徑", p.r25 ? num(p.r25) : "—", p.r25 ? "km" : ""),
+      stat("移動", p.dir ? directionName(p.dir) : "—", "", p.speed ? `${num(p.speed)} km/h` : ""),
     ].join("");
-    $(".ty-near").innerHTML = this.nearText(p);
+    $(".ty-threat").innerHTML = this.threat(p);
     this.globe?.scrubTyphoon(this.index, hours === 0 ? null : p);
   }
 
-  // How far the centre and the gale circle are from Taiwan, and the closest forecast approach.
-  nearText(p) {
+  // How far the gale circle and the centre are from Taiwan, and the closest forecast approach.
+  threat(p) {
     if (!this.globe) return "";
     const here = this.globe.distanceToTaiwan(p.lon, p.lat);
     const gale = Math.max(here.km - (p.r15 ?? 0), 0);
-    const parts = [gale === 0
-      ? `<b class="alert">七級風暴圈已觸及臺灣</b>`
-      : `七級風暴圈距臺灣約 <b>${km(gale)}</b> km`];
-    parts.push(`中心距${escapeHtml(here.county ?? "臺灣")} ${km(here.km)} km`);
+    const lead = gale === 0
+      ? `<b class="alert">已觸及臺灣</b>`
+      : `<b>${km(gale)}<small>km</small></b>`;
+    const lines = [`中心距${escapeHtml(here.county ?? "臺灣")} ${km(here.km)} km`];
     const future = this.line.points.filter((q) => q.forecast);
     if (future.length) {
       const closest = future
         .map((q) => ({ q, d: this.globe.distanceToTaiwan(q.lon, q.lat).km }))
         .reduce((a, b) => (b.d < a.d ? b : a));
-      parts.push(`預測最接近：${when(closest.q.at)}（+${closest.q.hours}h）約 <b>${km(closest.d)}</b> km`);
+      lines.push(`最接近 <b>${km(closest.d)}</b> km · ${when(closest.q.at)}`);
     }
-    return parts.map((part) => `<span>${part}</span>`).join('<span class="sep">·</span>');
+    return `<small>七級風暴圈距臺灣</small>${lead}${lines.map((line) => `<span>${line}</span>`).join("")}`;
   }
 
-  // From "now" or the end, playing starts at the first analysed position.
+  // From the latest fix or the end, playing starts at the first analysed position.
   play() {
     if (this.hours === 0 || this.hours >= this.line.last) this.seek(this.line.first);
     const button = this.root.querySelector(".ty-play");
-    button.textContent = "❚❚";
+    button.innerHTML = PAUSE;
     button.setAttribute("aria-label", "暫停");
     this.timer = setInterval(() => {
       if (this.hours >= this.line.last) {
@@ -192,7 +204,7 @@ export class TyphoonCard {
     this.timer = null;
     const button = this.root.querySelector(".ty-play");
     if (button) {
-      button.textContent = "▶";
+      button.innerHTML = PLAY;
       button.setAttribute("aria-label", "播放颱風路徑");
     }
   }

@@ -34,7 +34,7 @@
       <span class="clock-icon" id="clock-icon" aria-hidden="true">☾</span>
       <input type="range" id="clock" min="0" max="1439" step="10" aria-label="日照模擬時間">
       <output id="clock-label" for="clock">現在</output>
-      <button type="button" class="chip" id="clock-now" hidden>回到現在</button>
+      <button type="button" class="now-btn" id="clock-now" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8a4.8 4.8 0 1 0 1.5-3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4.4 1.9v2.9h2.9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>回到現在</button>
     </div>
     <span class="divider" aria-hidden="true"></span>
     <button type="button" class="icon-btn text view-btn" id="mode" aria-pressed="false" title="切換 2D／3D" aria-label="2D 檢視">2D</button>
@@ -102,7 +102,7 @@
     <div class="legend card-legend" id="legend" aria-label="圖例"></div>
   </aside>
 
-  <section id="typhoon-card" class="typhoon-card glass" data-refract="36" aria-label="颱風資訊" hidden></section>
+  <section id="typhoon-card" class="typhoon-card glass glass-strong" data-refract="36" aria-label="颱風資訊" hidden></section>
 
   <div id="hover" class="hover-card glass" hidden></div>
 
