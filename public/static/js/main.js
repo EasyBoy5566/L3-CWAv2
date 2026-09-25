@@ -3,6 +3,7 @@ import { getJSON } from "./api.js";
 import { loadECharts } from "./charts.js";
 import { dayLabel, escapeHtml, hhmm, num, windText } from "./format.js";
 import { GlassSelect, Segmented, ensureRefraction, prefersReducedMotion, refract, revealInline, setSky, springEasing, stretchRefraction } from "./glass.js";
+import { Draggable } from "./drag.js";
 import { createGlobe } from "./globe.js";
 import { renderFreshness } from "./header.js";
 import { kindFromText } from "./icons.js";
@@ -228,10 +229,13 @@ function showHover(name, position, town = null) {
 }
 
 // ---------- map modes ----------
-// One mode at a time: temperature and rain on the county signs, or the air
-// quality, the wind or the typhoon on the map. The signs follow the mode:
-// each county's AQI (its worst station), its wind, or its name alone.
-const MODE_NAMES = { weather: "氣溫與降雨", air: "空氣品質", wind: "風場", typhoon: "颱風" };
+// One mode at a time, each a switch: temperature and rain on the county
+// signs, or the air quality, the wind or the typhoon on the map. Switching
+// one on switches the others off; switching it off leaves the map with the
+// county names alone ("none"). The signs follow the mode: each county's AQI
+// (its worst station), its wind, or its name.
+const MODE_NAMES = { weather: "氣溫與降雨", air: "空氣品質", wind: "風場", typhoon: "颱風", none: "無" };
+const OVERLAY_MODES = ["air", "wind", "typhoon"];
 // Where the wind goes, by the eighth of the compass it comes from.
 const WIND_ARROWS = ["↓", "↙", "←", "↖", "↑", "↗", "→", "↘"];
 const windArrow = (degrees) => (degrees === null || degrees === undefined ? "" : WIND_ARROWS[Math.round(degrees / 45) % 8]);
@@ -269,7 +273,7 @@ function syncPeek() {
 // The signs and the legend for the mode at hand.
 function applyMode() {
   const legend = $("legend");
-  legend.hidden = state.mode === "typhoon"; // the typhoon card is its own key
+  legend.hidden = state.mode === "typhoon" || state.mode === "none"; // the typhoon card is its own key
   if (state.mode === "weather") return applyLayer();
   const signs = {};
   if (state.mode === "air") {
@@ -291,17 +295,17 @@ async function setMode(mode) {
   if (mode === state.mode) return;
   const previous = state.mode;
   state.mode = mode;
-  document.querySelector(`input[name="mode"][value="${mode}"]`).checked = true;
+  for (const input of document.querySelectorAll('input[name="mode"]')) input.checked = input.value === mode;
   $("weather-options").hidden = mode !== "weather";
   syncPeek();
   syncStepper();
-  if (previous !== "weather") {
+  if (OVERLAY_MODES.includes(previous)) {
     setModeStatus(previous, "");
     if (previous === "typhoon") typhoonCard.hide();
     state.globe?.setOverlay(previous, false);
   }
   applyMode();
-  if (mode === "weather") return;
+  if (!OVERLAY_MODES.includes(mode)) return;
   // The typhoon takes the map: the county and township cards step aside.
   if (mode === "typhoon" && state.region) closeRegion();
   setModeStatus(mode, "載入中…", { busy: true });
@@ -320,7 +324,10 @@ async function setMode(mode) {
 }
 
 $("modes").addEventListener("change", (event) => {
-  if (event.target.name === "mode") setMode(event.target.value);
+  const input = event.target;
+  if (input.name !== "mode") return;
+  if (input.checked) setMode(input.value);
+  else if (input.value === state.mode) setMode("none");
 });
 
 // ---------- 3D: buildings and the shadow simulation ----------
@@ -619,6 +626,13 @@ controls.addEventListener("focusout", (event) => {
   if (!controls.contains(event.relatedTarget)) closeControlsSoon();
 });
 $("controls-peek").addEventListener("click", () => setControlsOpen(canHover || !controls.classList.contains("open")));
+
+// The cards can be moved (drag.js): the controls by their grip or header,
+// the weather cards (together, and only sideways: they run the screen's
+// height) and the typhoon card by their grips.
+new Draggable(document.querySelector(".left-stack"), { key: "controls", handles: ".grabber, .controls-peek" });
+new Draggable(document.querySelector(".right-stack"), { key: "weather", handles: ".grabber", axis: "x" });
+new Draggable($("typhoon-card"), { key: "typhoon", handles: ".grabber, .ty-head", base: "translateX(-50%)" });
 document.addEventListener("pointerdown", (event) => {
   if (canHover || !controls.classList.contains("open")) return;
   if (!controls.contains(event.target) && !event.target.closest?.(".gselect-menu")) setControlsOpen(false);

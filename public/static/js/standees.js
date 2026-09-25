@@ -171,6 +171,50 @@ function drawSign({ name, text, color, approx, selected }) {
   return canvas;
 }
 
+// A station's value in a small sign of the same glass: the colour dot and the
+// value, no name (the hover card has it).
+export function drawBadge(text, color) {
+  const s = PIXEL_RATIO;
+  const context = document.createElement("canvas").getContext("2d");
+  const valueFont = `700 ${12.5 * s}px ${FONT}`;
+  context.font = valueFont;
+  const valueWidth = context.measureText(text).width;
+  const pad = 8 * s;
+  const dot = 8 * s;
+  const gap = 5 * s;
+  const h = 22 * s;
+  const w = Math.ceil(pad + dot + gap + valueWidth + pad);
+  const m = MARGIN * s;
+  const canvas = context.canvas;
+  canvas.width = w + m * 2;
+  canvas.height = h + m * 2;
+  glassPill(context, m, m, w, h);
+  const cy = m + h / 2;
+  const x = m + pad;
+  context.save();
+  context.shadowColor = color;
+  context.shadowBlur = 5 * s;
+  context.fillStyle = color;
+  context.beginPath();
+  context.arc(x + dot / 2, cy, dot / 2, 0, Math.PI * 2);
+  context.fill();
+  context.restore();
+  context.strokeStyle = "rgba(255, 255, 255, 0.5)";
+  context.lineWidth = 1.2 * s;
+  context.stroke();
+  context.shadowColor = "rgba(0, 0, 0, 0.9)";
+  context.shadowBlur = 4 * s;
+  context.shadowOffsetY = 1 * s;
+  context.textBaseline = "middle";
+  context.font = valueFont;
+  context.fillStyle = "#f8fafc";
+  context.fillText(text, x + dot + gap, cy + 0.5 * s);
+  return canvas;
+}
+// Badges are drawn at PIXEL_RATIO; this shows them at full size close in,
+// shrinking a little with distance like the county signs.
+export const BADGE_SCALE = new Cesium.NearFarScalar(60000, 1 / PIXEL_RATIO, 600000, 0.7 / PIXEL_RATIO);
+
 // Station names: full size from close in out to the township view (60 km),
 // then shrinking to a little over half 400 km out and no smaller, so they
 // never outgrow the township as the camera pulls back.

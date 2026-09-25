@@ -108,6 +108,7 @@ export class TyphoonCard {
     const sub = [cyclone.nameEn, cyclone.number ? `第 ${cyclone.number} 號` : null, cloud ? `雲圖 ${when(Date.parse(cloud), true)}` : null]
       .filter(Boolean).map(escapeHtml).join(" · ");
     this.root.innerHTML = `
+      <div class="grabber" title="拖曳移動，雙擊歸位" aria-hidden="true"></div>
       <div class="ty-head">
         <span class="ty-badge" aria-hidden="true"><svg class="ty-symbol" viewBox="-32 -32 64 64"><g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"><circle r="10"/><path d="M0 -10Q19 -10 25 -25M0 10Q-19 10 -25 25"/></g></svg></span>
         <div class="ty-title">

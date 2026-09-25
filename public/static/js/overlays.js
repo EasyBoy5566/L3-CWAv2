@@ -9,6 +9,7 @@ import { getJSON } from "./api.js";
 import { addCloudLayer, latestCloudTime } from "./clouds.js";
 import { beaufortLevel, cycloneClass, directionName } from "./cyclone.js";
 import { AQI, bandOf } from "./scale.js";
+import { BADGE_SCALE, drawBadge } from "./standees.js";
 import { WindField } from "./wind.js";
 
 const color = (css, alpha = 1) => Cesium.Color.fromCssColorString(css).withAlpha(alpha);
@@ -16,36 +17,18 @@ const num = (value, digits = 1, unit = "") => (value === null || value === undef
 // "2026-09-24T14:00:00+08:00" → "9/24 14:00", in the timestamp's own (Taipei) time.
 const dayTime = (iso) => `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))} ${iso.slice(11, 16)}`;
 
-// A station's AQI in a disc of its category's colour, drawn at twice the
-// size it is shown so it stays sharp; one image per value.
-const aqiImages = new Map();
-function aqiImage(aqi) {
+// A station's AQI on a small glass sign, like the county signs; one image per value.
+const aqiBadges = new Map();
+function aqiBadge(aqi) {
   const value = Math.round(aqi);
-  if (aqiImages.has(value)) return aqiImages.get(value);
-  const [, fill, , ink] = bandOf(AQI, value);
-  const size = 56;
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = size;
-  const context = canvas.getContext("2d");
-  context.beginPath();
-  context.arc(size / 2, size / 2, size / 2 - 3, 0, Math.PI * 2);
-  context.fillStyle = fill;
-  context.fill();
-  context.lineWidth = 3;
-  context.strokeStyle = "rgba(8, 13, 28, 0.75)";
-  context.stroke();
-  context.fillStyle = ink;
-  context.font = `700 ${value >= 100 ? 21 : 24}px 'Noto Sans TC', 'Microsoft JhengHei', sans-serif`;
-  context.textAlign = "center";
-  context.textBaseline = "middle";
-  context.fillText(String(value), size / 2, size / 2 + 1);
-  aqiImages.set(value, canvas);
-  return canvas;
+  if (!aqiBadges.has(value)) aqiBadges.set(value, drawBadge(String(value), bandOf(AQI, value)[1]));
+  return aqiBadges.get(value);
 }
 
-// Stations are dots from afar, where the county signs carry each county's
-// AQI, and discs with their number from this close in.
-const STATION_NUMBERS_WITHIN = 260000;
+// From afar the county signs carry each county's AQI and the stations, dozens
+// to a city, would pile up; they fade in as the camera comes closer, whole
+// (sign and number together), and stay put from there in.
+const STATIONS_FADE = new Cesium.NearFarScalar(260000, 1, 420000, 0);
 
 // Layer definitions: what each draws, and what its hover card says.
 const DEFINITIONS = {
@@ -65,39 +48,21 @@ const DEFINITIONS = {
       // The model has one point per county, which the county signs already show.
       if (!model) {
         for (const row of data.stations) {
-          const [, fill] = bandOf(AQI, row.aqi);
-          const position = Cesium.Cartesian3.fromDegrees(row.lon, row.lat);
-          const properties = { overlay: "air", row };
-          // Two entities: Cesium draws a clamped point as a billboard, and an
-          // entity's point and billboard would then share one.
           source.entities.add({
-            position,
-            properties,
-            point: {
-              pixelSize: 7,
-              color: color(fill, 0.9),
-              outlineColor: color("#0b1220", 0.8),
-              outlineWidth: 1.5,
-              heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-              disableDepthTestDistance: Number.POSITIVE_INFINITY,
-              distanceDisplayCondition: new Cesium.DistanceDisplayCondition(STATION_NUMBERS_WITHIN, Number.POSITIVE_INFINITY),
-            },
-          });
-          source.entities.add({
-            position,
-            properties,
+            position: Cesium.Cartesian3.fromDegrees(row.lon, row.lat),
+            properties: { overlay: "air", row },
             billboard: {
-              image: aqiImage(row.aqi),
-              scale: 0.5,
+              image: aqiBadge(row.aqi),
+              scaleByDistance: BADGE_SCALE,
+              translucencyByDistance: STATIONS_FADE,
               heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
               disableDepthTestDistance: Number.POSITIVE_INFINITY,
-              distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, STATION_NUMBERS_WITHIN),
             },
           });
         }
       }
       const worst = data.stations.reduce((a, b) => (b.aqi > a.aqi ? b : a));
-      const where = model ? worst.county : `${worst.name}（${worst.county ?? ""}）`;
+      const where = model ? worst.county : worst.name;
       return `${model ? "模式估計" : `環境部 ${data.stations.length} 站`} · 最高 ${where} ${Math.round(worst.aqi)}`;
     },
     info(row) {

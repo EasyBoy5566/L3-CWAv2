@@ -3,6 +3,11 @@
 // own frame loop and projects every particle each frame, so it follows the
 // camera without asking the globe to redraw.
 //
+// Each particle keeps its last few places and the canvas is drawn afresh
+// every frame, its trail fading from head to tail. (Fading the whole canvas
+// a little each frame instead leaves a haze: 8-bit alpha rounds the faintest
+// trails to a value that never reaches zero.)
+//
 // Two grids: a coarse one across the seas and a fine one over Taiwan, blended
 // where they meet. The field fades out towards the coarse grid's edge, so it
 // has no border to see, and calm wind is drawn faint so strong wind leads.
@@ -14,16 +19,25 @@ const BAND_RAMP = [0, 0.15, 0.35, 0.5, 0.7, 0.85, 1, 1];
 // By day the imagery is busy and every line needs its strength; at night the
 // map is dark and bright lines glare, so calm wind all but disappears and
 // only strong wind is drawn near full. A band's opacity is
-// alpha × (floor + (1 − floor) × ramp).
+// alpha × (floor + (1 − floor) × ramp). `trail` is how many places a
+// particle's line runs back over.
 const SKY = {
-  day: { alpha: 1, floor: 0.55, width: 1.5, fade: 0.93 },
-  dusk: { alpha: 0.85, floor: 0.35, width: 1.3, fade: 0.92 },
-  night: { alpha: 0.65, floor: 0.2, width: 1.1, fade: 0.9 },
+  day: { alpha: 1, floor: 0.55, width: 1.5, trail: 26 },
+  dusk: { alpha: 0.85, floor: 0.35, width: 1.3, trail: 22 },
+  night: { alpha: 0.65, floor: 0.2, width: 1.1, trail: 18 },
 };
+// A trail in four parts, head to tail, each fainter than the one before.
+const AGE_ALPHA = [1, 0.66, 0.4, 0.18];
+// When the camera moves, this many of a trail's places are projected again;
+// the rest grow back as the particle moves on.
+const KEEP_ON_MOVE = 3;
 const EDGE_FADE = 4; // degrees over which the field fades out at its edge
 const BLEND = 1; // degrees over which the fine grid gives way to the coarse
 const LEVELS = 3; // steps of the edge fade, each drawn as its own path
 const SPEED = 1.6e-4; // degrees per frame per m/s, per degree of view width
+// Closer in than this the half-degree grid says nothing about the streets
+// below, and the city's 3D buildings need every frame: the field rests.
+const REST_BELOW = 25000;
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
 const rgba = (hex, alpha) => `rgba(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")}, ${alpha})`;
@@ -57,6 +71,10 @@ function sampleGrid(grid, lon, lat) {
   return x === null || y === null ? null : [x, y];
 }
 
+const forget = (p) => {
+  p.lons.length = p.lats.length = p.xs.length = p.ys.length = 0;
+};
+
 export class WindField {
   constructor(viewer, field, sky = "night") {
     this.viewer = viewer;
@@ -71,7 +89,7 @@ export class WindField {
     viewer.cesiumWidget.container.appendChild(this.canvas);
     this.context = this.canvas.getContext("2d");
     this.particles = [];
-    this.paths = WIND.bands.flatMap(() => Array.from({ length: LEVELS }, () => []));
+    this.paths = Array.from({ length: WIND.bands.length * LEVELS * AGE_ALPHA.length }, () => []);
     this.world = new Cesium.Cartesian3();
     this.screen = new Cesium.Cartesian2();
     this.rectangle = new Cesium.Rectangle();
@@ -94,11 +112,10 @@ export class WindField {
   /** "day", "dusk" or "night" (see glass.js setSky). */
   setSky(sky) {
     this.sky = SKY[sky] ?? SKY.night;
-    this.styles = WIND.bands.flatMap(([, hex], band) => Array.from({ length: LEVELS },
-      (_, level) => {
-        const { alpha, floor } = this.sky;
-        return rgba(hex, +(alpha * (floor + (1 - floor) * BAND_RAMP[band]) * ((level + 1) / LEVELS)).toFixed(3));
-      }));
+    const { alpha, floor } = this.sky;
+    // One style per band, edge level and part of the trail, in that order.
+    this.styles = WIND.bands.flatMap(([, hex], band) => Array.from({ length: LEVELS }, (_, level) =>
+      AGE_ALPHA.map((age) => rgba(hex, +(alpha * (floor + (1 - floor) * BAND_RAMP[band]) * ((level + 1) / LEVELS) * age).toFixed(3)))).flat());
     this.area = null; // redraw from clean
   }
 
@@ -112,7 +129,7 @@ export class WindField {
     this.height = height;
     // More screen, more particles; a phone gets about 600, a desktop 2,200.
     const count = Math.round(Math.min(2200, Math.max(600, (width * height) / 900)));
-    this.particles = Array.from({ length: count }, () => ({ lon: 0, lat: 0, age: 0, life: 0, x: null, y: null }));
+    this.particles = Array.from({ length: count }, () => ({ life: 0, lons: [], lats: [], xs: [], ys: [], path: -1 }));
     this.area = null; // re-read the view before spawning
   }
 
@@ -155,10 +172,10 @@ export class WindField {
     p.lat = a.south + Math.random() * (a.north - a.south);
     p.age = 0;
     p.life = 40 + Math.random() * 60;
-    p.x = p.y = null;
+    forget(p);
   }
 
-  // The particle's place on screen, or null behind the globe or off the canvas.
+  // A place on screen, or null behind the globe or off the canvas.
   project(lon, lat) {
     const { scene } = this.viewer;
     const world = Cesium.Cartesian3.fromDegrees(lon, lat, 0, Cesium.Ellipsoid.WGS84, this.world);
@@ -168,10 +185,31 @@ export class WindField {
     return screen;
   }
 
-  // Move each particle one step and queue the segment it drew by colour and strength.
+  // The camera moved: each trail keeps its newest few places, projected anew.
+  reproject() {
+    for (const p of this.particles) {
+      const keep = Math.min(KEEP_ON_MOVE, p.lons.length);
+      const lons = p.lons.slice(-keep);
+      const lats = p.lats.slice(-keep);
+      forget(p);
+      for (let k = 0; k < keep; k++) {
+        const screen = this.project(lons[k], lats[k]);
+        if (!screen) {
+          forget(p);
+          continue;
+        }
+        p.lons.push(lons[k]);
+        p.lats.push(lats[k]);
+        p.xs.push(screen.x);
+        p.ys.push(screen.y);
+      }
+    }
+  }
+
+  // Move each particle one step and add its new place to its trail.
   advance(dt) {
     const step = SPEED * this.span * dt;
-    for (const path of this.paths) path.length = 0;
+    const length = this.sky.trail;
     for (const p of this.particles) {
       if (p.life === 0) this.spawn(p);
       const wind = this.sample(p.lon, p.lat);
@@ -184,21 +222,39 @@ export class WindField {
       p.lat += v * step;
       const screen = this.project(p.lon, p.lat);
       if (!screen) {
-        p.x = p.y = null;
+        forget(p);
         continue;
       }
-      const level = Math.ceil(strength * LEVELS) - 1;
-      if (p.x !== null && level >= 0) {
-        const band = WIND.bands.indexOf(bandOf(WIND, Math.hypot(u, v)));
-        this.paths[band * LEVELS + level].push(p.x, p.y, screen.x, screen.y);
+      p.lons.push(p.lon);
+      p.lats.push(p.lat);
+      p.xs.push(screen.x);
+      p.ys.push(screen.y);
+      if (p.xs.length > length) {
+        p.lons.shift();
+        p.lats.shift();
+        p.xs.shift();
+        p.ys.shift();
       }
-      p.x = screen.x;
-      p.y = screen.y;
+      // The whole trail takes the colour of the wind where the particle is now.
+      const level = Math.ceil(strength * LEVELS) - 1;
+      p.path = level < 0 ? -1 : (WIND.bands.indexOf(bandOf(WIND, Math.hypot(u, v))) * LEVELS + level) * AGE_ALPHA.length;
     }
   }
 
-  stroke() {
+  draw() {
     const { context } = this;
+    context.clearRect(0, 0, this.width, this.height);
+    for (const path of this.paths) path.length = 0;
+    const ages = AGE_ALPHA.length;
+    for (const p of this.particles) {
+      const n = p.xs.length;
+      if (n < 2 || p.path < 0) continue;
+      for (let i = 1; i < n; i++) {
+        // The newest segment in the first part, the oldest in the last.
+        const age = Math.min(ages - 1, Math.floor(((n - 1 - i) / (n - 1)) * ages));
+        this.paths[p.path + age].push(p.xs[i - 1], p.ys[i - 1], p.xs[i], p.ys[i]);
+      }
+    }
     context.lineWidth = this.sky.width;
     context.lineCap = "round";
     this.paths.forEach((path, index) => {
@@ -219,34 +275,49 @@ export class WindField {
       this.last = null;
       return;
     }
-    const { camera } = this.viewer;
-    const { context } = this;
-    if (!Cesium.Matrix4.equals(camera.viewMatrix, this.lastView) || !this.area) {
+    const { camera, scene } = this.viewer;
+    // Resting: close in, or the Google 3D buildings are up (they hide the globe).
+    if (!scene.globe.show || camera.positionCartographic.height < REST_BELOW) {
+      if (!this.resting) {
+        this.resting = true;
+        this.context.clearRect(0, 0, this.width, this.height);
+      }
+      this.last = null;
+      return;
+    }
+    if (this.resting) {
+      this.resting = false;
+      this.area = null; // start over from the view at hand
+    }
+    const fresh = !this.area;
+    const moved = fresh || !Cesium.Matrix4.equals(camera.viewMatrix, this.lastView);
+    if (moved) {
       Cesium.Matrix4.clone(camera.viewMatrix, this.lastView);
       this.occluder.cameraPosition = camera.positionWC;
       this.readView();
-      context.clearRect(0, 0, this.width, this.height);
-      for (const p of this.particles) p.x = p.y = null;
-      if (!this.area) return;
-      // Nothing is animated for those who asked for less motion: short
-      // streaks are traced once for each view instead.
-      if (reducedMotion.matches) {
-        for (const p of this.particles) this.spawn(p);
-        for (let k = 0; k < 12; k++) {
-          this.advance(1);
-          this.stroke();
-        }
+      if (!this.area) {
+        this.context.clearRect(0, 0, this.width, this.height);
         return;
       }
+      if (fresh) {
+        // Starting over (after a rest, a new sky or size): every particle is born anew.
+        for (const p of this.particles) p.life = 0;
+      } else {
+        this.reproject();
+      }
     }
-    if (reducedMotion.matches) return;
+    // Nothing is animated for those who asked for less motion: the trails
+    // are traced once for each view instead.
+    if (reducedMotion.matches) {
+      if (!moved) return;
+      for (const p of this.particles) this.spawn(p);
+      for (let k = 0; k < this.sky.trail; k++) this.advance(1);
+      this.draw();
+      return;
+    }
     const dt = this.last ? Math.min((time - this.last) / 16.7, 3) : 1;
     this.last = time;
-    context.globalCompositeOperation = "destination-in";
-    context.fillStyle = `rgba(0, 0, 0, ${this.sky.fade})`;
-    context.fillRect(0, 0, this.width, this.height);
-    context.globalCompositeOperation = "source-over";
     this.advance(dt);
-    this.stroke();
+    this.draw();
   }
 }
