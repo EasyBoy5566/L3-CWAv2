@@ -2,43 +2,82 @@
 // canvas laid over the globe. Cesium renders on demand; this canvas runs its
 // own frame loop and projects every particle each frame, so it follows the
 // camera without asking the globe to redraw.
+//
+// Two grids: a coarse one across the seas and a fine one over Taiwan, blended
+// where they meet. The field fades out towards the coarse grid's edge, so it
+// has no border to see, and calm wind is drawn faint so strong wind leads.
 /* global Cesium */
+import { WIND, bandOf } from "./scale.js";
 
-// Speed bands in m/s and their colours: calm is pale, 6 級 (10.8) turns
-// yellow, 8 級 (17.2) red. The legend in the controls card draws the same.
-const BANDS = [
-  [2, "#bae6fd"],
-  [4, "#7dd3fc"],
-  [6, "#5eead4"],
-  [8, "#a3e635"],
-  [10.8, "#facc15"],
-  [13.9, "#fb923c"],
-  [17.2, "#f87171"],
-  [Infinity, "#e879f9"],
-];
-const FADE = 0.92; // how much of the last frame's trails each frame keeps
+// How much each band stands out, from calm (0) to 6 級 and up (1).
+const BAND_RAMP = [0, 0.15, 0.35, 0.5, 0.7, 0.85, 1, 1];
+// By day the imagery is busy and every line needs its strength; at night the
+// map is dark and bright lines glare, so calm wind all but disappears and
+// only strong wind is drawn near full. A band's opacity is
+// alpha × (floor + (1 − floor) × ramp).
+const SKY = {
+  day: { alpha: 1, floor: 0.55, width: 1.5, fade: 0.93 },
+  dusk: { alpha: 0.85, floor: 0.35, width: 1.3, fade: 0.92 },
+  night: { alpha: 0.65, floor: 0.2, width: 1.1, fade: 0.9 },
+};
+const EDGE_FADE = 4; // degrees over which the field fades out at its edge
+const BLEND = 1; // degrees over which the fine grid gives way to the coarse
+const LEVELS = 3; // steps of the edge fade, each drawn as its own path
 const SPEED = 1.6e-4; // degrees per frame per m/s, per degree of view width
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
-const band = (speed) => BANDS.findIndex(([limit]) => speed < limit);
+const rgba = (hex, alpha) => `rgba(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")}, ${alpha})`;
+const clamp01 = (x) => Math.min(1, Math.max(0, x));
+
+// Degrees from a point to a grid's nearest edge; negative outside it.
+function inset(grid, lon, lat) {
+  const east = grid.lon0 + grid.step * (grid.nx - 1);
+  const north = grid.lat0 + grid.step * (grid.ny - 1);
+  return Math.min(lon - grid.lon0, east - lon, lat - grid.lat0, north - lat);
+}
+
+// A grid's wind at a point as [u, v] m/s, bilinear between its points; null outside or where missing.
+function sampleGrid(grid, lon, lat) {
+  const { lon0, lat0, step, nx, ny, u, v } = grid;
+  const fx = (lon - lon0) / step;
+  const fy = (lat - lat0) / step;
+  if (fx < 0 || fy < 0 || fx > nx - 1 || fy > ny - 1) return null;
+  const i = Math.min(Math.floor(fx), nx - 2);
+  const j = Math.min(Math.floor(fy), ny - 2);
+  const tx = fx - i;
+  const ty = fy - j;
+  const k = j * nx + i;
+  const mix = (values) => {
+    const a = values[k], b = values[k + 1], c = values[k + nx], d = values[k + nx + 1];
+    if (a === null || b === null || c === null || d === null) return null;
+    return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
+  };
+  const x = mix(u);
+  const y = mix(v);
+  return x === null || y === null ? null : [x, y];
+}
 
 export class WindField {
-  constructor(viewer, field) {
+  constructor(viewer, field, sky = "night") {
     this.viewer = viewer;
-    this.field = field;
-    const { lon0, lat0, step, nx, ny } = field.grid;
-    this.bounds = { west: lon0, south: lat0, east: lon0 + step * (nx - 1), north: lat0 + step * (ny - 1) };
+    this.grids = field.grids; // coarse first
+    const outer = this.grids[0];
+    this.bounds = {
+      west: outer.lon0, south: outer.lat0,
+      east: outer.lon0 + outer.step * (outer.nx - 1), north: outer.lat0 + outer.step * (outer.ny - 1),
+    };
     this.canvas = document.createElement("canvas");
     this.canvas.className = "wind-canvas";
     viewer.cesiumWidget.container.appendChild(this.canvas);
     this.context = this.canvas.getContext("2d");
     this.particles = [];
-    this.segments = BANDS.map(() => []);
+    this.paths = WIND.bands.flatMap(() => Array.from({ length: LEVELS }, () => []));
     this.world = new Cesium.Cartesian3();
     this.screen = new Cesium.Cartesian2();
     this.rectangle = new Cesium.Rectangle();
     this.lastView = new Cesium.Matrix4();
     this.occluder = new Cesium.EllipsoidalOccluder(Cesium.Ellipsoid.WGS84, viewer.camera.positionWC);
+    this.setSky(sky);
     this.frame = this.frame.bind(this);
     this.resize = this.resize.bind(this);
     window.addEventListener("resize", this.resize);
@@ -52,6 +91,17 @@ export class WindField {
     this.canvas.remove();
   }
 
+  /** "day", "dusk" or "night" (see glass.js setSky). */
+  setSky(sky) {
+    this.sky = SKY[sky] ?? SKY.night;
+    this.styles = WIND.bands.flatMap(([, hex], band) => Array.from({ length: LEVELS },
+      (_, level) => {
+        const { alpha, floor } = this.sky;
+        return rgba(hex, +(alpha * (floor + (1 - floor) * BAND_RAMP[band]) * ((level + 1) / LEVELS)).toFixed(3));
+      }));
+    this.area = null; // redraw from clean
+  }
+
   resize() {
     const { clientWidth: width, clientHeight: height } = this.viewer.scene.canvas;
     const ratio = Math.min(devicePixelRatio || 1, 2);
@@ -60,41 +110,33 @@ export class WindField {
     this.context.setTransform(ratio, 0, 0, ratio, 0, 0);
     this.width = width;
     this.height = height;
-    // More screen, more particles; a phone gets about 700, a desktop 2,500.
-    const count = Math.round(Math.min(2500, Math.max(600, (width * height) / 800)));
+    // More screen, more particles; a phone gets about 600, a desktop 2,200.
+    const count = Math.round(Math.min(2200, Math.max(600, (width * height) / 900)));
     this.particles = Array.from({ length: count }, () => ({ lon: 0, lat: 0, age: 0, life: 0, x: null, y: null }));
     this.area = null; // re-read the view before spawning
   }
 
-  /** The wind at a point as [u, v] m/s, bilinear between grid points; null outside or where missing. */
+  /** The wind at a point: [u, v, strength 0–1 by the distance from the edge], or null outside. */
   sample(lon, lat) {
-    const { lon0, lat0, step, nx, ny } = this.field.grid;
-    const fx = (lon - lon0) / step;
-    const fy = (lat - lat0) / step;
-    if (fx < 0 || fy < 0 || fx > nx - 1 || fy > ny - 1) return null;
-    const i = Math.min(Math.floor(fx), nx - 2);
-    const j = Math.min(Math.floor(fy), ny - 2);
-    const tx = fx - i;
-    const ty = fy - j;
-    const at = (values, di, dj) => values[(j + dj) * nx + i + di];
-    const mix = (values) => {
-      const corners = [at(values, 0, 0), at(values, 1, 0), at(values, 0, 1), at(values, 1, 1)];
-      if (corners.some((c) => c === null)) return null;
-      const [a, b, c, d] = corners;
-      return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
-    };
-    const u = mix(this.field.u);
-    const v = mix(this.field.v);
-    return u === null || v === null ? null : [u, v];
+    const [outer, inner] = this.grids;
+    let wind = sampleGrid(outer, lon, lat);
+    if (!wind) return null;
+    const near = inner ? inset(inner, lon, lat) : -1;
+    const fine = near > 0 ? sampleGrid(inner, lon, lat) : null;
+    if (fine) {
+      const w = clamp01(near / BLEND);
+      wind = [wind[0] * (1 - w) + fine[0] * w, wind[1] * (1 - w) + fine[1] * w];
+    }
+    return [wind[0], wind[1], clamp01(inset(outer, lon, lat) / EDGE_FADE)];
   }
 
-  // Where particles are born: the part of the grid the camera sees, and how
+  // Where particles are born: the part of the field the camera sees, and how
   // wide the view is, which sets how far a particle moves per frame.
   readView() {
-    const { camera } = this.viewer;
-    const view = camera.computeViewRectangle(Cesium.Ellipsoid.WGS84, this.rectangle);
+    const view = this.viewer.camera.computeViewRectangle(Cesium.Ellipsoid.WGS84, this.rectangle);
     const b = this.bounds;
-    let west = b.west, east = b.east, south = b.south, north = b.north, span = east - west;
+    let { west, east, south, north } = b;
+    let span = east - west;
     if (view && view.east > view.west) {
       const d = Cesium.Math.toDegrees;
       west = Math.max(west, d(view.west));
@@ -126,18 +168,18 @@ export class WindField {
     return screen;
   }
 
-  // Move each particle one step and queue the segment it drew, by colour.
-  advance(dt, draw) {
+  // Move each particle one step and queue the segment it drew by colour and strength.
+  advance(dt) {
     const step = SPEED * this.span * dt;
-    for (const segments of this.segments) segments.length = 0;
+    for (const path of this.paths) path.length = 0;
     for (const p of this.particles) {
-      if (p.age === 0 && p.life === 0) this.spawn(p);
+      if (p.life === 0) this.spawn(p);
       const wind = this.sample(p.lon, p.lat);
       if (!wind || ++p.age > p.life) {
         this.spawn(p);
         continue;
       }
-      const [u, v] = wind;
+      const [u, v, strength] = wind;
       p.lon += (u * step) / Math.cos((p.lat * Math.PI) / 180);
       p.lat += v * step;
       const screen = this.project(p.lon, p.lat);
@@ -145,7 +187,11 @@ export class WindField {
         p.x = p.y = null;
         continue;
       }
-      if (draw && p.x !== null) this.segments[band(Math.hypot(u, v))].push(p.x, p.y, screen.x, screen.y);
+      const level = Math.ceil(strength * LEVELS) - 1;
+      if (p.x !== null && level >= 0) {
+        const band = WIND.bands.indexOf(bandOf(WIND, Math.hypot(u, v)));
+        this.paths[band * LEVELS + level].push(p.x, p.y, screen.x, screen.y);
+      }
       p.x = screen.x;
       p.y = screen.y;
     }
@@ -153,16 +199,16 @@ export class WindField {
 
   stroke() {
     const { context } = this;
-    context.lineWidth = 1.4;
+    context.lineWidth = this.sky.width;
     context.lineCap = "round";
-    this.segments.forEach((segments, index) => {
-      if (!segments.length) return;
+    this.paths.forEach((path, index) => {
+      if (!path.length) return;
       context.beginPath();
-      for (let k = 0; k < segments.length; k += 4) {
-        context.moveTo(segments[k], segments[k + 1]);
-        context.lineTo(segments[k + 2], segments[k + 3]);
+      for (let k = 0; k < path.length; k += 4) {
+        context.moveTo(path[k], path[k + 1]);
+        context.lineTo(path[k + 2], path[k + 3]);
       }
-      context.strokeStyle = BANDS[index][1];
+      context.strokeStyle = this.styles[index];
       context.stroke();
     });
   }
@@ -174,9 +220,8 @@ export class WindField {
       return;
     }
     const { camera } = this.viewer;
-    const moved = !Cesium.Matrix4.equals(camera.viewMatrix, this.lastView);
     const { context } = this;
-    if (moved || !this.area) {
+    if (!Cesium.Matrix4.equals(camera.viewMatrix, this.lastView) || !this.area) {
       Cesium.Matrix4.clone(camera.viewMatrix, this.lastView);
       this.occluder.cameraPosition = camera.positionWC;
       this.readView();
@@ -188,7 +233,7 @@ export class WindField {
       if (reducedMotion.matches) {
         for (const p of this.particles) this.spawn(p);
         for (let k = 0; k < 12; k++) {
-          this.advance(1, true);
+          this.advance(1);
           this.stroke();
         }
         return;
@@ -198,10 +243,10 @@ export class WindField {
     const dt = this.last ? Math.min((time - this.last) / 16.7, 3) : 1;
     this.last = time;
     context.globalCompositeOperation = "destination-in";
-    context.fillStyle = `rgba(0, 0, 0, ${FADE})`;
+    context.fillStyle = `rgba(0, 0, 0, ${this.sky.fade})`;
     context.fillRect(0, 0, this.width, this.height);
     context.globalCompositeOperation = "source-over";
-    this.advance(dt, true);
+    this.advance(dt);
     this.stroke();
   }
 }

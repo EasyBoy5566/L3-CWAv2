@@ -22,7 +22,8 @@ def fake_cwa(monkeypatch, samples):
 
     def open_meteo(url, points, params):
         calls.append((url, dict(params)))
-        return [model_point(wind_speed_10m=5, wind_direction_10m=45, us_aqi=60, pm2_5=20, us_aqi_pm2_5=60) for _ in points]
+        hourly = {"time": ["2026-09-24T14:00", "2026-09-24T15:00"], "wind_speed_10m": [5, 6], "wind_direction_10m": [45, 50]}
+        return [{**model_point(us_aqi=60, pm2_5=20, us_aqi_pm2_5=60), "hourly": hourly} for _ in points]
 
     monkeypatch.setattr(overlays, "fetch_dataset", fetch)
     monkeypatch.setattr(overlays.opendata, "open_meteo", open_meteo)
@@ -119,20 +120,44 @@ def test_unknown_overlay_and_cwa_failure(client, loaded, monkeypatch):
     overlays.clear_cache()
 
 
-def test_wind_grid_is_east_and_north_components():
-    grid = {"lon0": 120, "lat0": 22, "step": 1, "nx": 2, "ny": 2}
-    points = parse.wind_points(grid)
-    assert points == [(22, 120), (22, 121), (23, 120), (23, 121)]
+def hourly(times, speeds, directions):
+    return {"hourly": {"time": times, "wind_speed_10m": speeds, "wind_direction_10m": directions}}
+
+
+def test_wind_frames_are_east_and_north_components():
+    grid = {"lon0": 120, "lat0": 22, "step": 1, "nx": 2, "ny": 1}
+    assert parse.wind_points(grid) == [(22, 120), (22, 121)]
+    times = ["2026-09-24T13:00", "2026-09-24T14:00"]
     # From the north goes south; from the west goes east; a missing point stays missing.
-    results = [model_point(wind_speed_10m=10, wind_direction_10m=0), model_point(wind_speed_10m=4, wind_direction_10m=270),
-               model_point(wind_speed_10m=None, wind_direction_10m=None), model_point(wind_speed_10m=0, wind_direction_10m=90)]
-    field = parse.parse_wind_grid(results, grid)
-    assert field["u"][0] == pytest.approx(0) and field["v"][0] == -10
-    assert field["u"][1] == 4 and field["v"][1] == pytest.approx(0)
-    assert field["u"][2] is None and field["max"] == 10
-    assert field["time"] == "2026-09-24T14:15:00+08:00"
+    results = [hourly(times, [10, 3], [0, 0]), hourly(times, [4, None], [270, None])]
+    first, second = parse.parse_wind_frames(results, grid)
+    assert first["time"] == "2026-09-24T13:00:00+08:00"
+    assert first["u"][0] == pytest.approx(0) and first["v"][0] == -10
+    assert first["u"][1] == 4 and first["v"][1] == pytest.approx(0)
+    assert second["u"][1] is None
     with pytest.raises(WeatherParseError):
-        parse.parse_wind_grid([model_point()], grid)
+        parse.parse_wind_frames([hourly(times, [None, None], [None, None])], grid)
+
+
+def test_wind_field_serves_the_hour_at_hand():
+    coarse = {"lon0": 110, "lat0": 15, "step": 2, "nx": 1, "ny": 1}
+    fine = {"lon0": 120, "lat0": 22, "step": 1, "nx": 2, "ny": 1}
+    frames = [
+        [{"time": "2026-09-24T00:00:00+08:00", "u": [1], "v": [0]}, {"time": "2026-09-24T01:00:00+08:00", "u": [2], "v": [0]}],
+        [{"time": "2026-09-24T00:00:00+08:00", "u": [3, 0], "v": [4, 0]}, {"time": "2026-09-24T01:00:00+08:00", "u": [6, 0], "v": [8, None]}],
+    ]
+    field = parse.wind_field([coarse, fine], frames, FROZEN)  # FROZEN is 00:40, nearer 01:00
+    assert [g["u"][0] for g in field["grids"]] == [2, 6]
+    assert field["grids"][0]["nx"] == 1 and field["time"] == "2026-09-24T01:00:00+08:00"
+    assert field["max"] == 10 and field["mean"] == 10
+
+
+def test_wind_fetches_the_hours_once(client, loaded, fake_cwa):
+    client.get("/api/overlays/wind")
+    overlays._cache.pop("wind")  # the next hour's request
+    wind = client.get("/api/overlays/wind").get_json()
+    assert len(wind["grids"]) == 2
+    assert sum(1 for url, _ in fake_cwa if "open-meteo" in url) == 2  # one per grid, once
 
 
 def test_moenv_stations_skip_maintenance_and_name_counties_as_cwa_does():

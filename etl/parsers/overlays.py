@@ -288,30 +288,45 @@ def wind_points(grid: dict) -> list[tuple[float, float]]:
             for j in range(grid["ny"]) for i in range(grid["nx"])]
 
 
-def parse_wind_grid(results: list[dict], grid: dict) -> dict:
-    """Open-Meteo's current 10 m wind at each grid point, as east (u) and north (v) m/s.
+def _components(speed, direction) -> tuple[float | None, float | None]:
+    """Speed and the direction the wind comes from → where it goes, as east (u) and north (v) m/s."""
+    speed, direction = number(speed, 0, 120), number(direction, 0, 360)
+    if speed is None or direction is None:
+        return None, None
+    radians = math.radians(direction)
+    return round(-speed * math.sin(radians), 2), round(-speed * math.cos(radians), 2)
 
-    CWA and Open-Meteo give the direction the wind comes from; u and v are
-    where it goes, which is what the particles follow.
-    """
-    u, v, times = [], [], []
+
+def parse_wind_frames(results: list[dict], grid: dict) -> list[dict]:
+    """Open-Meteo's hourly 10 m wind at each grid point: one frame per hour, [{time, u, v}]."""
+    columns = []
     for result in results:
-        current = result.get("current") if isinstance(result.get("current"), dict) else {}
-        speed = number(current.get("wind_speed_10m"), 0, 120)
-        direction = number(current.get("wind_direction_10m"), 0, 360)
-        if speed is None or direction is None:
-            u.append(None)
-            v.append(None)
-            continue
-        radians = math.radians(direction)
-        u.append(round(-speed * math.sin(radians), 2))
-        v.append(round(-speed * math.cos(radians), 2))
-        times.append(_minute(current.get("time")))
-    if not any(value is not None for value in u):
+        hourly = result.get("hourly") if isinstance(result.get("hourly"), dict) else {}
+        times = hourly.get("time") or []
+        speeds = hourly.get("wind_speed_10m") or []
+        directions = hourly.get("wind_direction_10m") or []
+        columns.append({_minute(t): _components(s, d) for t, s, d in zip(times, speeds, directions)})
+    moments = sorted({t for column in columns for t in column if t})
+    frames = []
+    for moment in moments:
+        pairs = [column.get(moment, (None, None)) for column in columns]
+        if any(u is not None for u, _ in pairs):
+            frames.append({"time": moment, "u": [u for u, _ in pairs], "v": [v for _, v in pairs]})
+    if not frames:
         raise WeatherParseError("風場資料中沒有有效的格點。")
-    speeds = [math.hypot(a, b) for a, b in zip(u, v) if a is not None]
-    return {"time": max((t for t in times if t), default=None), "grid": grid, "u": u, "v": v,
-            "max": round(max(speeds), 1), "mean": round(sum(speeds) / len(speeds), 1)}
+    return frames
+
+
+def wind_field(grids: list[dict], frames: list[list[dict]], now: datetime) -> dict:
+    """Each grid's frame for the hour nearest `now`, with the fine grid's mean and highest speed."""
+    chosen = []
+    for grid, grid_frames in zip(grids, frames):
+        frame = min(grid_frames, key=lambda f: abs((datetime.fromisoformat(f["time"]) - now).total_seconds()))
+        chosen.append({**grid, "time": frame["time"], "u": frame["u"], "v": frame["v"]})
+    fine = chosen[-1]
+    speeds = [math.hypot(a, b) for a, b in zip(fine["u"], fine["v"]) if a is not None and b is not None]
+    return {"time": fine["time"], "grids": chosen,
+            "max": round(max(speeds), 1) if speeds else None, "mean": round(sum(speeds) / len(speeds), 1) if speeds else None}
 
 
 # MOENV's categories: the upper bound of each, its name and its colour.

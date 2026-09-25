@@ -55,3 +55,50 @@ export function renderLegend(element, scale) {
       <span class="legend-ticks">${scale.ticks.map((t) => `<span>${t}</span>`).join("")}</span>
     </span>`;
 }
+
+// Stepped scales: each band's upper bound and colour.
+// MOENV's six AQI categories, with the ink that reads on each.
+export const AQI = {
+  title: "空氣品質 AQI",
+  bands: [
+    [50, "#00e400", "良好", "#0b1220"],
+    [100, "#ffff00", "普通", "#0b1220"],
+    [150, "#ff7e00", "對敏感族群不健康", "#0b1220"],
+    [200, "#ff0000", "對所有族群不健康", "#ffffff"],
+    [300, "#8f3f97", "非常不健康", "#ffffff"],
+    [Infinity, "#7e0023", "危害", "#ffffff"],
+  ],
+  ticks: [0, 51, 101, 151, 201, 301],
+};
+
+// Wind in m/s: calm is a pale, faint line, 6 級 (10.8) turns yellow and
+// 8 級 (17.2) red. wind.js fades the calm bands so the strong wind leads.
+export const WIND = {
+  title: "地面風速 m/s",
+  bands: [
+    [2, "#e2e8f0"],
+    [4, "#bae6fd"],
+    [6, "#7dd3fc"],
+    [8, "#5eead4"],
+    [10.8, "#a3e635"],
+    [13.9, "#facc15"],
+    [17.2, "#fb923c"],
+    [Infinity, "#f87171"],
+  ],
+  ticks: [0, 2, 4, 6, 8, 10.8, 13.9, 17.2],
+};
+
+/** The band a value falls in: [upper, colour, …]. */
+export const bandOf = (scale, value) => scale.bands.find(([upper]) => value <= upper) ?? scale.bands.at(-1);
+
+/** A stepped scale's key: equal cells, each labelled at its lower bound. */
+export function renderBands(element, scale) {
+  const n = scale.bands.length;
+  const gradient = scale.bands.map(([, c], i) => `${c} ${(i / n) * 100}% ${((i + 1) / n) * 100}%`).join(", ");
+  element.innerHTML = `
+    <span class="legend-title">${scale.title}</span>
+    <span class="legend-scale">
+      <span class="legend-bar" style="background: linear-gradient(90deg, ${gradient})"></span>
+      <span class="legend-ticks stepped" style="grid-template-columns: repeat(${n}, 1fr)">${scale.ticks.map((t) => `<span>${t}</span>`).join("")}</span>
+    </span>`;
+}

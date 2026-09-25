@@ -1,5 +1,5 @@
 // Map layers drawn on the globe, each one a Cesium data source built from
-// /api/overlays/<name> when its switch is turned on. Station and township
+// /api/overlays/<name> when its mode is chosen. Station and township
 // datasets are not layers any more: they feed the township card
 // (town-data.js), and the selected township's stations are dots (globe.js).
 // The typhoon, the wind field and the air quality are the ones that belong
@@ -8,6 +8,7 @@
 import { getJSON } from "./api.js";
 import { addCloudLayer, latestCloudTime } from "./clouds.js";
 import { beaufortLevel, cycloneClass, directionName } from "./cyclone.js";
+import { AQI, bandOf } from "./scale.js";
 import { WindField } from "./wind.js";
 
 const color = (css, alpha = 1) => Cesium.Color.fromCssColorString(css).withAlpha(alpha);
@@ -15,24 +16,13 @@ const num = (value, digits = 1, unit = "") => (value === null || value === undef
 // "2026-09-24T14:00:00+08:00" → "9/24 14:00", in the timestamp's own (Taipei) time.
 const dayTime = (iso) => `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))} ${iso.slice(11, 16)}`;
 
-// MOENV's AQI categories: the upper bound of each, its name and colours.
-const AQI_LEVELS = [
-  [50, "良好", "#00e400", "#0b1220"],
-  [100, "普通", "#ffff00", "#0b1220"],
-  [150, "對敏感族群不健康", "#ff7e00", "#0b1220"],
-  [200, "對所有族群不健康", "#ff0000", "#ffffff"],
-  [300, "非常不健康", "#8f3f97", "#ffffff"],
-  [Infinity, "危害", "#7e0023", "#ffffff"],
-];
-const aqiLevel = (aqi) => AQI_LEVELS.find(([limit]) => aqi <= limit);
-
 // A station's AQI in a disc of its category's colour, drawn at twice the
 // size it is shown so it stays sharp; one image per value.
 const aqiImages = new Map();
 function aqiImage(aqi) {
   const value = Math.round(aqi);
   if (aqiImages.has(value)) return aqiImages.get(value);
-  const [, , fill, ink] = aqiLevel(value);
+  const [, fill, , ink] = bandOf(AQI, value);
   const size = 56;
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = size;
@@ -53,14 +43,18 @@ function aqiImage(aqi) {
   return canvas;
 }
 
+// Stations are dots from afar, where the county signs carry each county's
+// AQI, and discs with their number from this close in.
+const STATION_NUMBERS_WITHIN = 260000;
+
 // Layer definitions: what each draws, and what its hover card says.
 const DEFINITIONS = {
   wind: {
     // Nothing to pick: the particles are a canvas of their own over the globe.
-    animate: (viewer, data) => new WindField(viewer, data),
+    animate: (viewer, data, sky) => new WindField(viewer, data, sky),
     build(_source, data) {
       const level = beaufortLevel(data.max);
-      return `平均 ${num(data.mean)} · 最大 ${num(data.max)} m/s${level === null ? "" : `（${level} 級）`}${data.time ? ` · ${data.time.slice(11, 16)}` : ""}`;
+      return `臺灣平均 ${num(data.mean)} · 最大 ${num(data.max)} m/s${level === null ? "" : `（${level} 級）`}${data.time ? ` · ${data.time.slice(11, 16)}` : ""}`;
     },
     info: () => null,
   },
@@ -68,25 +62,43 @@ const DEFINITIONS = {
     build(source, data) {
       if (!data.stations.length) return "目前沒有空氣品質資料";
       const model = data.source === "model";
-      for (const row of data.stations) {
-        source.entities.add({
-          position: Cesium.Cartesian3.fromDegrees(row.lon, row.lat),
-          properties: { overlay: "air", row: { ...row, model } },
-          billboard: {
-            image: aqiImage(row.aqi),
-            scale: 0.5,
-            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-            disableDepthTestDistance: Number.POSITIVE_INFINITY,
-            scaleByDistance: new Cesium.NearFarScalar(1.5e5, 1.1, 1.5e6, 0.6),
-            // The model's points are the counties' own, where the county
-            // signs stand: the disc steps to the left of the sign.
-            ...(model ? { horizontalOrigin: Cesium.HorizontalOrigin.RIGHT, pixelOffset: new Cesium.Cartesian2(-16, 0) } : {}),
-          },
-        });
+      // The model has one point per county, which the county signs already show.
+      if (!model) {
+        for (const row of data.stations) {
+          const [, fill] = bandOf(AQI, row.aqi);
+          const position = Cesium.Cartesian3.fromDegrees(row.lon, row.lat);
+          const properties = { overlay: "air", row };
+          // Two entities: Cesium draws a clamped point as a billboard, and an
+          // entity's point and billboard would then share one.
+          source.entities.add({
+            position,
+            properties,
+            point: {
+              pixelSize: 7,
+              color: color(fill, 0.9),
+              outlineColor: color("#0b1220", 0.8),
+              outlineWidth: 1.5,
+              heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              distanceDisplayCondition: new Cesium.DistanceDisplayCondition(STATION_NUMBERS_WITHIN, Number.POSITIVE_INFINITY),
+            },
+          });
+          source.entities.add({
+            position,
+            properties,
+            billboard: {
+              image: aqiImage(row.aqi),
+              scale: 0.5,
+              heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, STATION_NUMBERS_WITHIN),
+            },
+          });
+        }
       }
       const worst = data.stations.reduce((a, b) => (b.aqi > a.aqi ? b : a));
-      const where = model ? worst.county : `${worst.county ?? ""}${worst.name}`;
-      return `${model ? "模式估計" : `${data.stations.length} 站`} · 最高 ${where} ${Math.round(worst.aqi)}`;
+      const where = model ? worst.county : `${worst.name}（${worst.county ?? ""}）`;
+      return `${model ? "模式估計" : `環境部 ${data.stations.length} 站`} · 最高 ${where} ${Math.round(worst.aqi)}`;
     },
     info(row) {
       const lines = [["AQI", `${Math.round(row.aqi)}`]];
@@ -94,10 +106,9 @@ const DEFINITIONS = {
       if (row.pm10 !== null) lines.push(["PM10", num(row.pm10, 0, " µg/m³")]);
       if (row.o3 !== null) lines.push(["臭氧", num(row.o3, 0, " ppb")]);
       if (row.pollutant) lines.push(["主要污染物", row.pollutant]);
-      const place = row.model ? row.county : `${row.name}測站${row.county ? ` · ${row.county}` : ""}`;
       return {
-        title: `${place} · ${row.status ?? aqiLevel(row.aqi)[1]}`,
-        sub: `${row.time ? dayTime(row.time) : ""} ${row.model ? "模式估計（CAMS）" : "環境部觀測"}`.trim(),
+        title: `${row.name}測站 · ${row.status ?? bandOf(AQI, row.aqi)[2]}`,
+        sub: `${row.county ?? ""} · ${row.time ? dayTime(row.time) : ""} 環境部觀測`,
         lines,
       };
     },
@@ -390,6 +401,7 @@ export class Overlays {
     this.pending = new Map();
     this.ghosts = new Map(); // cyclone index → the timeline marker's point
     this.brightness = 1;
+    this.sky = "night";
   }
 
   // Drop a layer's data source, its imagery (the typhoon's cloud) and its animation (the wind).
@@ -428,7 +440,7 @@ export class Overlays {
     const imagery = definition.imagery?.(this.viewer, data, prepared) ?? [];
     for (const layer of imagery) layer.brightness = this.brightness;
     if (previous) this.discard(previous);
-    const animation = definition.animate?.(this.viewer, data) ?? null;
+    const animation = definition.animate?.(this.viewer, data, this.sky) ?? null;
     this.active.set(name, { source, status, data, imagery, animation, ...prepared });
     this.dimClouds();
     if (definition.fly && !previous) this.frame(definition.points?.(data) ?? []);
@@ -466,6 +478,17 @@ export class Overlays {
   setBrightness(brightness) {
     this.brightness = brightness;
     for (const layer of this.active.values()) for (const imagery of layer.imagery) imagery.brightness = brightness;
+  }
+
+  /** Day, dusk or night, for what draws itself (the wind). */
+  setSky(sky) {
+    this.sky = sky;
+    for (const layer of this.active.values()) layer.animation?.setSky(sky);
+  }
+
+  /** What /api/overlays/<name> gave for an active layer, or null. */
+  data(name) {
+    return this.active.get(name)?.data ?? null;
   }
 
   /** When the satellite picture was taken (ISO), or null when there is none. */

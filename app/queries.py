@@ -72,6 +72,8 @@ def map_layer(database, layer: str, day: str | None) -> dict:
                 "temperature": row["temperature"],
                 "humidity": row["humidity"],
                 "weather": row["weather"],
+                "windSpeed": row["windSpeed"],
+                "windDir": row["windDir"],
                 "observedAt": row["observedAt"],
             }
             for name, row in current.items()

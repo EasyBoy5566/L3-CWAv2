@@ -837,25 +837,39 @@ body.page-region { background: transparent; }
 .toggle.busy small { color: var(--accent); }
 .toggle.error small { color: var(--alert); }
 
-/* A layer's colour key, under its switch while the layer is on. */
-.legend { display: none; position: relative; margin-top: 5px; font-size: 10px; color: var(--faint); }
-.toggle input:checked ~ .toggle-text .legend { display: block; }
-.legend i { display: block; height: 5px; border-radius: 3px; }
-/* The wind bands of wind.js over 0–20 m/s. */
-.wind-legend { height: 21px; }
-.wind-legend i {
-  background: linear-gradient(90deg, #bae6fd 0 10%, #7dd3fc 10% 20%, #5eead4 20% 30%, #a3e635 30% 40%,
-    #facc15 40% 54%, #fb923c 54% 69.5%, #f87171 69.5% 86%, #e879f9 86%);
+/* The map modes: a list where one is chosen, each with a dot of light. */
+.modes { display: grid; gap: 0; margin-top: 6px; }
+.mode-dot {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0 10px 0 2px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  transition: box-shadow 0.3s;
 }
-.wind-legend span { position: absolute; top: 8px; white-space: nowrap; }
-/* MOENV's six AQI categories, each labelled at its lower bound. */
-.aqi-legend { display: none; grid-template-columns: repeat(6, 1fr); row-gap: 3px; }
-.toggle input:checked ~ .toggle-text .aqi-legend { display: grid; }
-.aqi-legend i {
-  grid-column: 1 / -1;
-  background: linear-gradient(90deg, #00e400 0 16.67%, #ffff00 16.67% 33.33%, #ff7e00 33.33% 50%, #ff0000 50% 66.67%,
-    #8f3f97 66.67% 83.33%, #7e0023 83.33%);
+.mode-dot::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 8px rgba(125, 211, 252, 0.9);
+  transform: scale(0);
+  transition: transform 0.35s var(--spring-soft, ease);
 }
+.mode input:checked + .mode-dot { box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 10px rgba(125, 211, 252, 0.35); }
+.mode input:checked + .mode-dot::after { transform: scale(1); }
+.mode input:focus-visible + .mode-dot { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mode input:checked ~ .toggle-text { font-weight: 600; }
+/* The temperature and rain choices, under their mode while it is chosen. */
+.mode-options { padding: 2px 0 8px 38px; }
+.mode-options[hidden] { display: none; }
+.legend-ticks.stepped { display: grid; }
+.legend[hidden] { display: none; }
 
 /* wind.js draws its particles here, over the globe and under everything else. */
 .wind-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }

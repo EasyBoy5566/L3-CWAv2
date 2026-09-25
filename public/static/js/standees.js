@@ -12,7 +12,7 @@
 // glow along the bottom. WebGL cannot blur what lies behind a billboard; the
 // tint is kept light so the map shows through, and the text has a dark halo.
 /* global Cesium */
-import { colorAt } from "./scale.js";
+import { MISSING, colorAt } from "./scale.js";
 
 // Drawn at this multiple of their on-screen size, so the text stays sharp.
 const PIXEL_RATIO = 2;
@@ -102,8 +102,9 @@ function glassPill(context, x0, y0, w, h, selected = false) {
 }
 
 // One sign, drawn on a canvas: a rounded glass pill with the value's colour
-// dot, the name and the value.
+// dot, the name and the value; with no value, the name alone.
 function drawSign({ name, text, color, approx, selected }) {
+  const plain = !text;
   const s = PIXEL_RATIO;
   const context = document.createElement("canvas").getContext("2d");
   const nameFont = `500 ${13 * s}px ${FONT}`;
@@ -119,7 +120,7 @@ function drawSign({ name, text, color, approx, selected }) {
   const dot = 10 * s;
   const gap = 6 * s;
   const h = 30 * s;
-  const w = Math.ceil(pad + dot + gap + nameWidth + gap + approxWidth + valueWidth + pad);
+  const w = Math.ceil(plain ? pad + nameWidth + pad : pad + dot + gap + nameWidth + gap + approxWidth + valueWidth + pad);
   const m = MARGIN * s;
   const canvas = context.canvas;
   canvas.width = w + m * 2;
@@ -131,20 +132,23 @@ function drawSign({ name, text, color, approx, selected }) {
   // Dot, name, value, with a faint shadow to read over bright ground.
   const cy = y0 + h / 2;
   let x = x0 + pad;
-  context.save();
-  context.shadowColor = color;
-  context.shadowBlur = 6 * s;
-  context.fillStyle = color;
-  context.beginPath();
-  context.arc(x + dot / 2, cy, dot / 2, 0, Math.PI * 2);
-  context.fill();
-  context.restore();
-  context.strokeStyle = "rgba(255, 255, 255, 0.5)";
-  context.lineWidth = 1.5 * s;
-  context.beginPath();
-  context.arc(x + dot / 2, cy, dot / 2, 0, Math.PI * 2);
-  context.stroke();
-  x += dot + gap;
+  // The dot in the value's colour; a sign with no value has none.
+  if (!plain) {
+    context.save();
+    context.shadowColor = color;
+    context.shadowBlur = 6 * s;
+    context.fillStyle = color;
+    context.beginPath();
+    context.arc(x + dot / 2, cy, dot / 2, 0, Math.PI * 2);
+    context.fill();
+    context.restore();
+    context.strokeStyle = "rgba(255, 255, 255, 0.5)";
+    context.lineWidth = 1.5 * s;
+    context.beginPath();
+    context.arc(x + dot / 2, cy, dot / 2, 0, Math.PI * 2);
+    context.stroke();
+    x += dot + gap;
+  }
   // The glass is clear enough that text needs its own dark halo to read over bright ground.
   context.shadowColor = "rgba(0, 0, 0, 0.9)";
   context.shadowBlur = 4 * s;
@@ -154,6 +158,7 @@ function drawSign({ name, text, color, approx, selected }) {
   context.fillStyle = selected ? "#f8fafc" : "rgba(241, 245, 249, 0.92)";
   context.fillText(name, x, cy + 0.5 * s);
   x += nameWidth + gap;
+  if (plain) return canvas;
   if (approx) {
     context.font = smallFont;
     context.fillStyle = "rgba(226, 232, 240, 0.8)";
@@ -281,15 +286,24 @@ export class Standees {
   }
 
   setValues(layer, values, scale) {
-    for (const [name, item] of this.items) {
+    const signs = {};
+    for (const name of this.items.keys()) {
       const value = values[name]?.value ?? null;
       const digits = layer === "now" ? 1 : 0;
-      item.state = {
-        ...item.state,
+      signs[name] = {
         text: value === null ? "—" : `${Number(value).toFixed(layer === "pop" ? 0 : digits)}${scale.unit}`,
         color: colorAt(scale, value),
         approx: Boolean(values[name]?.approx),
       };
+    }
+    this.setSigns(signs);
+  }
+
+  /** Each county's sign: {text, color, approx}; a county left out shows its name alone. */
+  setSigns(signs) {
+    for (const [name, item] of this.items) {
+      const sign = signs[name];
+      item.state = { ...item.state, text: sign?.text ?? "", color: sign?.color ?? MISSING, approx: Boolean(sign?.approx) };
       this.draw(item);
     }
     this.scene.requestRender();

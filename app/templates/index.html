@@ -74,13 +74,6 @@
     </button>
     <div class="controls-body" id="controls-body" inert>
     <div class="controls-inner">
-    <div class="control-title">圖層</div>
-    <div id="layers" role="radiogroup" aria-label="圖層">
-      <button type="button" role="radio" data-value="now" aria-checked="true">即時</button>
-      <button type="button" role="radio" data-value="maxt" aria-checked="false">最高</button>
-      <button type="button" role="radio" data-value="mint" aria-checked="false">最低</button>
-      <button type="button" role="radio" data-value="pop" aria-checked="false">降雨</button>
-    </div>
     <label class="field">
       <span class="control-title">縣市</span>
       <select id="county">
@@ -89,27 +82,37 @@
       </select>
     </label>
 
+    <!-- One mode at a time: what the county signs and the map show. -->
     <section class="group" id="group-map">
-    <div class="control-title">地圖圖層</div>
-    <div class="toggles" id="overlays">
-      <label class="toggle" data-overlay="typhoon">
-        <input type="checkbox" data-overlay="typhoon">
-        <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
-        <span class="toggle-text">颱風路徑<small data-note="路徑與 70% 潛勢">路徑與 70% 潛勢</small></span>
+    <div class="control-title">圖層</div>
+    <div class="modes" id="modes" role="radiogroup" aria-label="圖層">
+      <label class="toggle mode" data-mode="weather">
+        <input type="radio" name="mode" value="weather" checked>
+        <span class="mode-dot" aria-hidden="true"></span>
+        <span class="toggle-text">氣溫與降雨<small data-note="縣市觀測與預報">縣市觀測與預報</small></span>
       </label>
-      <label class="toggle" data-overlay="wind">
-        <input type="checkbox" data-overlay="wind">
-        <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
-        <span class="toggle-text">風場<small data-note="地面 10 公尺風速（m/s），每小時更新">地面 10 公尺風速（m/s），每小時更新</small>
-          <span class="legend wind-legend" aria-hidden="true"><i></i><span style="left:0">0</span><span style="left:30%">6</span><span style="left:54%">10.8</span><span style="left:86%">17.2</span></span>
-        </span>
+      <div class="mode-options" id="weather-options">
+        <div id="layers" role="radiogroup" aria-label="氣溫與降雨">
+          <button type="button" role="radio" data-value="now" aria-checked="true">即時</button>
+          <button type="button" role="radio" data-value="maxt" aria-checked="false">最高</button>
+          <button type="button" role="radio" data-value="mint" aria-checked="false">最低</button>
+          <button type="button" role="radio" data-value="pop" aria-checked="false">降雨</button>
+        </div>
+      </div>
+      <label class="toggle mode" data-mode="air">
+        <input type="radio" name="mode" value="air">
+        <span class="mode-dot" aria-hidden="true"></span>
+        <span class="toggle-text">空氣品質<small data-note="環境部測站 AQI，每小時更新">環境部測站 AQI，每小時更新</small></span>
       </label>
-      <label class="toggle" data-overlay="air">
-        <input type="checkbox" data-overlay="air">
-        <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
-        <span class="toggle-text">空氣品質<small data-note="AQI，每小時更新">AQI，每小時更新</small>
-          <span class="legend aqi-legend" aria-hidden="true"><i></i><span>0</span><span>51</span><span>101</span><span>151</span><span>201</span><span>301</span></span>
-        </span>
+      <label class="toggle mode" data-mode="wind">
+        <input type="radio" name="mode" value="wind">
+        <span class="mode-dot" aria-hidden="true"></span>
+        <span class="toggle-text">風場<small data-note="地面 10 公尺風，每小時更新">地面 10 公尺風，每小時更新</small></span>
+      </label>
+      <label class="toggle mode" data-mode="typhoon">
+        <input type="radio" name="mode" value="typhoon">
+        <span class="mode-dot" aria-hidden="true"></span>
+        <span class="toggle-text">颱風<small data-note="路徑與 70% 潛勢">路徑與 70% 潛勢</small></span>
       </label>
     </div>
     </section>

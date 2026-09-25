@@ -1,7 +1,7 @@
 // The globe page: layers, dates, the county panel, the sun clock and polling.
 import { getJSON } from "./api.js";
 import { loadECharts } from "./charts.js";
-import { dayLabel, escapeHtml, hhmm, num } from "./format.js";
+import { dayLabel, escapeHtml, hhmm, num, windText } from "./format.js";
 import { GlassSelect, Segmented, ensureRefraction, prefersReducedMotion, refract, revealInline, setSky, springEasing, stretchRefraction } from "./glass.js";
 import { createGlobe } from "./globe.js";
 import { renderFreshness } from "./header.js";
@@ -10,7 +10,8 @@ import { RegionView, townBody, townHead } from "./panel.js";
 import { SECTIONS, TownData } from "./town-data.js";
 import { Ticker } from "./ticker.js";
 import { TyphoonCard } from "./typhoon.js";
-import { MISSING, colorAt, renderLegend, scaleFor } from "./scale.js";
+import { beaufortLevel } from "./cyclone.js";
+import { AQI, MISSING, WIND, bandOf, colorAt, renderBands, renderLegend, scaleFor } from "./scale.js";
 
 const POLL_MS = 3 * 60 * 1000;
 const $ = (id) => document.getElementById(id);
@@ -21,13 +22,9 @@ const menus = {
   date: new GlassSelect($("date")),
 };
 const townData = new TownData();
-// Closing the card turns the typhoon layer off, as the switch would.
+// Closing the card leaves the typhoon for temperature and rain.
 const typhoonCard = new TyphoonCard($("typhoon-card"), {
-  onClose: () => {
-    const input = document.querySelector('input[data-overlay="typhoon"]');
-    input.checked = false;
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-  },
+  onClose: () => setMode("weather"),
 });
 
 const setCounty = (value) => {
@@ -36,7 +33,9 @@ const setCounty = (value) => {
 };
 
 const state = {
-  layer: "now",
+  mode: "weather", // weather | air | wind | typhoon: one at a time
+  layer: "now", // within weather: now | maxt | mint | pop
+  nowValues: null, // each county's latest observation, for the wind mode's signs
   date: null,
   meta: null,
   values: {},
@@ -71,11 +70,13 @@ async function loadLayer() {
 }
 
 // Values may arrive before the globe exists; it takes them when it does.
+// In the other modes the signs show what that mode does (applyMode).
 function applyLayer() {
+  renderFallbackTiles();
+  if (state.mode !== "weather") return;
   const scale = scaleFor(state.layer);
   renderLegend($("legend"), scale);
   state.globe?.setValues(state.layer, state.values, scale);
-  renderFallbackTiles();
 }
 
 // ---------- panel ----------
@@ -198,7 +199,21 @@ function showHover(name, position, town = null) {
   }
   const entry = state.values[name];
   let body = `<div class="muted">無資料</div>`;
-  if (entry && state.layer === "now") {
+  const air = state.mode === "air" ? countyAir()[name] : null;
+  const wind = state.mode === "wind" ? state.nowValues?.[name] : null;
+  if (air) {
+    const model = state.globe?.overlayData("air")?.source === "model";
+    body = `<div class="value">AQI ${Math.round(air.aqi)}</div>
+      <div>${escapeHtml(air.status ?? bandOf(AQI, air.aqi)[2])}${air.pollutant ? ` · ${escapeHtml(air.pollutant)}` : ""}</div>
+      <div class="muted">${model ? "模式估計" : `${escapeHtml(air.name)}測站最高`}${air.time ? ` · ${hhmm(air.time)}` : ""}</div>`;
+  } else if (wind && wind.windSpeed !== null && wind.windSpeed !== undefined) {
+    const level = beaufortLevel(wind.windSpeed);
+    body = `<div class="value">${num(wind.windSpeed, 1, " m/s")}</div>
+      <div>${escapeHtml(windText(wind.windDir))}${level === null ? "" : ` · 蒲福 ${level} 級`}</div>
+      <div class="muted">${hhmm(wind.observedAt)} 測站觀測</div>`;
+  } else if (state.mode === "air" || state.mode === "wind") {
+    body = `<div class="muted">無資料</div>`;
+  } else if (entry && state.layer === "now") {
     body = `<div class="value">${num(entry.temperature, 1, "°C")}</div>
       <div>${escapeHtml(entry.weather ?? "")} · 濕度 ${num(entry.humidity, 0, "%")}</div>
       <div class="muted">${hhmm(entry.observedAt)} 觀測</div>`;
@@ -212,36 +227,100 @@ function showHover(name, position, town = null) {
   placeCard(card, position);
 }
 
-// ---------- map layers ----------
-function setOverlayStatus(name, text, { error = false, busy = false } = {}) {
-  const row = document.querySelector(`.toggle[data-overlay="${name}"]`);
+// ---------- map modes ----------
+// One mode at a time: temperature and rain on the county signs, or the air
+// quality, the wind or the typhoon on the map. The signs follow the mode:
+// each county's AQI (its worst station), its wind, or its name alone.
+const MODE_NAMES = { weather: "氣溫與降雨", air: "空氣品質", wind: "風場", typhoon: "颱風" };
+// Where the wind goes, by the eighth of the compass it comes from.
+const WIND_ARROWS = ["↓", "↙", "←", "↖", "↑", "↗", "→", "↘"];
+const windArrow = (degrees) => (degrees === null || degrees === undefined ? "" : WIND_ARROWS[Math.round(degrees / 45) % 8]);
+
+function setModeStatus(mode, text, { error = false, busy = false } = {}) {
+  const row = document.querySelector(`.mode[data-mode="${mode}"]`);
   const note = row.querySelector("small");
   note.textContent = text || note.dataset.note;
   row.classList.toggle("error", error);
   row.classList.toggle("busy", busy);
 }
 
-$("overlays").addEventListener("change", async (event) => {
-  const input = event.target.closest("input[data-overlay]");
-  if (!input || !state.globe) return;
-  const name = input.dataset.overlay;
-  if (!input.checked) {
-    await state.globe.setOverlay(name, false);
-    setOverlayStatus(name, "");
-    if (name === "typhoon") typhoonCard.hide();
-    return;
+/** Each county's worst air quality station, from the air layer. */
+function countyAir() {
+  const worst = {};
+  for (const station of state.globe?.overlayData("air")?.stations ?? []) {
+    if (station.county && station.aqi > (worst[station.county]?.aqi ?? -1)) worst[station.county] = station;
   }
-  // The typhoon takes the map: the county and township cards step aside.
-  if (name === "typhoon" && state.region) closeRegion();
-  setOverlayStatus(name, "載入中…", { busy: true });
+  return worst;
+}
+
+async function loadNow() {
   try {
-    const status = await state.globe.setOverlay(name, true);
-    if (input.checked) setOverlayStatus(name, status);
-    if (input.checked && name === "typhoon") typhoonCard.show(state.globe.typhoons());
-  } catch (error) {
-    input.checked = false;
-    setOverlayStatus(name, error.message, { error: true });
+    state.nowValues = (await getJSON("/api/map?layer=now")).values;
+  } catch {
+    // The signs show names alone until the next poll.
   }
+}
+
+function syncPeek() {
+  const layer = $("layers").querySelector('[aria-checked="true"]')?.textContent ?? "";
+  $("peek-layer").textContent = state.mode === "weather" ? layer : MODE_NAMES[state.mode];
+}
+
+// The signs and the legend for the mode at hand.
+function applyMode() {
+  const legend = $("legend");
+  legend.hidden = state.mode === "typhoon"; // the typhoon card is its own key
+  if (state.mode === "weather") return applyLayer();
+  const signs = {};
+  if (state.mode === "air") {
+    renderBands(legend, AQI);
+    for (const [county, station] of Object.entries(countyAir())) {
+      signs[county] = { text: String(Math.round(station.aqi)), color: bandOf(AQI, station.aqi)[1] };
+    }
+  } else if (state.mode === "wind") {
+    renderBands(legend, WIND);
+    for (const [county, row] of Object.entries(state.nowValues ?? {})) {
+      if (row.windSpeed === null || row.windSpeed === undefined) continue;
+      signs[county] = { text: `${windArrow(row.windDir)} ${num(row.windSpeed, 1)}`.trim(), color: bandOf(WIND, row.windSpeed)[1] };
+    }
+  }
+  state.globe?.setSigns(signs);
+}
+
+async function setMode(mode) {
+  if (mode === state.mode) return;
+  const previous = state.mode;
+  state.mode = mode;
+  document.querySelector(`input[name="mode"][value="${mode}"]`).checked = true;
+  $("weather-options").hidden = mode !== "weather";
+  syncPeek();
+  syncStepper();
+  if (previous !== "weather") {
+    setModeStatus(previous, "");
+    if (previous === "typhoon") typhoonCard.hide();
+    state.globe?.setOverlay(previous, false);
+  }
+  applyMode();
+  if (mode === "weather") return;
+  // The typhoon takes the map: the county and township cards step aside.
+  if (mode === "typhoon" && state.region) closeRegion();
+  setModeStatus(mode, "載入中…", { busy: true });
+  try {
+    if (!state.globe) throw new Error("需要 3D 地圖");
+    const [status] = await Promise.all([state.globe.setOverlay(mode, true), mode === "wind" ? loadNow() : null]);
+    if (state.mode !== mode) return;
+    setModeStatus(mode, status);
+    if (mode === "typhoon") typhoonCard.show(state.globe.typhoons());
+    applyMode();
+  } catch (error) {
+    if (state.mode !== mode) return;
+    await setMode("weather");
+    setModeStatus(mode, error.message, { error: true });
+  }
+}
+
+$("modes").addEventListener("change", (event) => {
+  if (event.target.name === "mode") setMode(event.target.value);
 });
 
 // ---------- 3D: buildings and the shadow simulation ----------
@@ -546,9 +625,9 @@ document.addEventListener("pointerdown", (event) => {
 });
 
 new Segmented($("layers"), {
-  onChange: (layer, button) => {
-    $("peek-layer").textContent = button.textContent;
+  onChange: (layer) => {
     state.layer = layer;
+    syncPeek();
     syncStepper();
     loadLayer().catch(showError);
   },
@@ -556,12 +635,13 @@ new Segmented($("layers"), {
 
 function syncStepper() {
   const select = $("date");
-  const live = state.layer === "now";
+  // Only temperature and rain have days to step through.
+  const live = state.mode !== "weather" || state.layer === "now";
   const index = [...select.options].findIndex((o) => o.value === state.date);
   select.disabled = live;
   $("date-prev").disabled = live || index <= 0;
   $("date-next").disabled = live || index < 0 || index >= select.options.length - 1;
-  $("stepper").title = live ? "即時圖層不需選擇日期" : "";
+  $("stepper").title = !live ? "" : state.mode === "weather" ? "即時圖層不需選擇日期" : "此圖層顯示目前資料";
   menus.date.sync();
 }
 
@@ -731,13 +811,9 @@ function showError(error) {
 // ---------- the weather ticker ----------
 const ticker = new Ticker($("ticker"), {
   onPick: (alert) => {
-    // A typhoon, wind or air alert turns its map layer on, as the switch would.
-    const layer = { typhoon: "typhoon", wind: "wind", air: "air" }[alert.category];
-    const input = layer && document.querySelector(`input[data-overlay="${layer}"]`);
-    if (input && !input.checked) {
-      input.checked = true;
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    }
+    // A typhoon, wind or air alert switches the map to its mode.
+    const mode = { typhoon: "typhoon", wind: "wind", air: "air" }[alert.category];
+    if (mode) setMode(mode);
     if (alert.category === "typhoon") return;
     if (alert.counties?.length) openRegion(alert.counties[0]);
   },
@@ -765,8 +841,10 @@ async function poll() {
     loadAlerts();
     if (state.globe) {
       const statuses = await state.globe.refreshOverlays();
-      for (const [name, status] of Object.entries(statuses)) setOverlayStatus(name, status);
+      for (const [name, status] of Object.entries(statuses)) setModeStatus(name, status);
       if ("typhoon" in statuses) typhoonCard.show(state.globe.typhoons());
+      if (state.mode === "wind") await loadNow();
+      if (state.mode !== "weather") applyMode();
     }
   } catch (error) {
     showError(error);

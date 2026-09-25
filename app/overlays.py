@@ -2,7 +2,8 @@
 
 Most come from CWA; the wind field and, without a MOENV key, the air quality
 come from Open-Meteo, whose free tier counts every grid point as a call: the
-hour-long cache keeps the wind's 225 points to a few thousand calls a day.
+wind's next hours are fetched together every three hours (config.WIND_FETCH_SECONDS)
+and each hour served from them.
 
 They are not written to the database. Each one is a live view of a single
 dataset, so the function keeps the reduced payload in memory for a few
@@ -31,6 +32,7 @@ TTL = {
     "uv": 3600,
     "townships": 1800,
     "wind": 3600,
+    "wind-frames": config.WIND_FETCH_SECONDS,
     "air": 1800,
 }
 
@@ -97,13 +99,22 @@ def _townships() -> dict:
     return {"towns": parse.parse_townships(documents, config.now())}
 
 
+def _wind_frames() -> list[list[dict]]:
+    """Every grid's hourly frames, from the hour just past to WIND_HOURS ahead."""
+    frames = []
+    for grid in config.WIND_GRIDS:
+        results = opendata.open_meteo(config.OPEN_METEO_FORECAST_URL, parse.wind_points(grid), {
+            "hourly": "wind_speed_10m,wind_direction_10m",
+            "wind_speed_unit": "ms",
+            "past_hours": 1,
+            "forecast_hours": config.WIND_HOURS,
+        })
+        frames.append(parse.parse_wind_frames(results, grid))
+    return frames
+
+
 def _wind() -> dict:
-    grid = config.WIND_GRID
-    results = opendata.open_meteo(config.OPEN_METEO_FORECAST_URL, parse.wind_points(grid), {
-        "current": "wind_speed_10m,wind_direction_10m",
-        "wind_speed_unit": "ms",
-    })
-    return parse.parse_wind_grid(results, grid)
+    return parse.wind_field(config.WIND_GRIDS, _cached("wind-frames", _wind_frames), config.now())
 
 
 def _air() -> dict:

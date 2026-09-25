@@ -116,12 +116,13 @@ copy .env.example .env        # 填入 CWA_API_KEY，其餘可先留空
 | `TURSO_DATABASE_URL`、`TURSO_AUTH_TOKEN` | Turso 資料庫。未設定時使用本機 `data/weather.db` |
 | `CRON_SECRET` | 排程端點的密碼，以 `Authorization: Bearer <值>` 傳入 |
 | `CESIUM_ION_TOKEN` | Cesium ion 瀏覽器 token，會出現在網頁中，務必在 ion 後台限制網域 |
+| `MOENV_API_KEY` | 環境部開放資料金鑰（data.moenv.gov.tw 免費申請），空氣品質用測站 AQI；沒設定時改用 Open-Meteo 的模式估計 |
 
 ## 部署
 
 1. **Turso**：建立資料庫，區域選 `aws-ap-northeast-1`（東京），取得 URL 並建立 token。把兩個值填進本機 `.env`，執行 `python -m scripts.init_db` 和 `python -m scripts.run_job all`，建立資料表並寫入第一批資料。
 2. **Cesium ion**：建立 access token，在 Allowed URLs 加入正式網域與 `http://localhost:5000`。
-3. **Vercel**：匯入 GitHub repository（Framework 選 Flask），在 Environment Variables 設定上表五組變數後部署。`vercel.json` 已經設定部署區域 `hnd1` 與每日排程；Vercel 會自動偵測 `api/index.py` 裡的 Flask `app`。
+3. **Vercel**：匯入 GitHub repository（Framework 選 Flask），在 Environment Variables 設定上表六組變數後部署。`vercel.json` 已經設定部署區域 `hnd1` 與每日排程；Vercel 會自動偵測 `api/index.py` 裡的 Flask `app`。
 4. **cron-job.org**：建立兩個工作，Method 選 POST，Header 加上 `Authorization: Bearer <CRON_SECRET>`：
    - `https://<網域>/api/cron/observations`，每 10 分鐘
    - `https://<網域>/api/cron/forecasts`，每小時

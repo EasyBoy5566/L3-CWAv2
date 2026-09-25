@@ -35,10 +35,19 @@ TOWNSHIP_DATASET = "F-D0047-093"
 TOWNSHIP_LOCATION_IDS = [f"F-D0047-{n:03d}" for n in range(1, 86, 4)]
 TOWNSHIP_ELEMENTS = ["溫度", "天氣現象", "3小時降雨機率"]
 
-# The wind field: Open-Meteo's 10 m wind on a half-degree grid over Taiwan
-# and its seas (15 × 15 points, one request). CWA publishes no wind grid.
+# The wind field: Open-Meteo's 10 m wind on two grids, coarse first. The wide
+# one reaches far enough across the seas that the field fades out off-screen
+# rather than ending in a square around Taiwan; the fine one draws Taiwan.
+# CWA's own grid (WRF, M-A0064) is 180 MB of GRIB2 an hour, too much here.
 OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
-WIND_GRID = {"lon0": 117.5, "lat0": 20.5, "step": 0.5, "nx": 15, "ny": 15}
+WIND_GRIDS = [
+    {"lon0": 109.5, "lat0": 13.5, "step": 1.5, "nx": 17, "ny": 14},
+    {"lon0": 117.5, "lat0": 20.5, "step": 0.5, "nx": 15, "ny": 15},
+]
+# Every grid point is a call on Open-Meteo's free tier, so the next hours are
+# fetched together and each hour served from them: 463 points every 3 hours.
+WIND_FETCH_SECONDS = 3 * 3600
+WIND_HOURS = 5
 
 # Air quality: MOENV's stations (aqx_p_432) when MOENV_API_KEY is set, and
 # otherwise Open-Meteo's CAMS model at each county's point.

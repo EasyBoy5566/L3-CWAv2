@@ -620,7 +620,13 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       standees.setValues(layer, values, scale);
     },
 
+    /** Each county sign's {text, color}; a county left out shows its name alone. */
+    setSigns(signs) {
+      standees.setSigns(signs);
+    },
+
     setOverlay: (name, on) => dataLayers.set(name, on),
+    overlayData: (name) => dataLayers.data(name),
     refreshOverlays: () => dataLayers.refresh(),
 
     typhoons: () => dataLayers.typhoons(),
@@ -719,6 +725,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       for (const layer of overlays) layer.brightness = OVERLAY_BRIGHTNESS[sky];
       for (const layer of highlightLayers) layer.brightness = HIGHLIGHT_BRIGHTNESS[sky];
       dataLayers.setBrightness(OVERLAY_BRIGHTNESS[sky]);
+      dataLayers.setSky(sky);
       scene.requestRender();
     },
 
