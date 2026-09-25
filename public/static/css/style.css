@@ -1369,10 +1369,15 @@ body.sim-mode .bar-slot .ticker { opacity: 0; translate: 0 -10px; visibility: hi
 
 /* ---------- folded cards: a one-line header ---------- */
 .card-peek { display: none; }
-.right-stack > .collapsed { flex: 0 0 auto; min-height: 0; }
+.right-stack > .collapsed, .right-stack.carrying > .glass { flex: 0 0 auto; min-height: 0; }
 .right-stack > .collapsed .panel-body,
-.right-stack > .collapsed .town-scroll { display: none; }
-.right-stack > .collapsed .card-peek {
+.right-stack > .collapsed .town-scroll,
+.right-stack.carrying .panel-body,
+.right-stack.carrying .town-scroll { display: none; }
+/* Carried (drag.js), the weather cards fold to their headers. */
+.right-stack.carrying { bottom: auto; }
+.right-stack > .collapsed .card-peek,
+.right-stack.carrying .card-peek {
   display: flex;
   align-items: center;
   gap: 8px;

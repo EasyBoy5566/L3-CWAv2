@@ -51,11 +51,15 @@ const DEFINITIONS = {
           source.entities.add({
             position: Cesium.Cartesian3.fromDegrees(row.lon, row.lat),
             properties: { overlay: "air", row },
+            // Not clamped to the ground: the terrain's exaggeration changes
+            // with the camera's height and its tiles refine as it moves, and a
+            // clamped sign blinks out each time its ground is looked up again.
+            // The stations are low, so sea level is where they stand, drawn
+            // over the terrain.
             billboard: {
               image: aqiBadge(row.aqi),
               scaleByDistance: BADGE_SCALE,
               translucencyByDistance: STATIONS_FADE,
-              heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
               disableDepthTestDistance: Number.POSITIVE_INFINITY,
             },
           });

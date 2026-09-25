@@ -3,7 +3,7 @@ import { getJSON } from "./api.js";
 import { loadECharts } from "./charts.js";
 import { dayLabel, escapeHtml, hhmm, num, windText } from "./format.js";
 import { GlassSelect, Segmented, ensureRefraction, prefersReducedMotion, refract, revealInline, setSky, springEasing, stretchRefraction } from "./glass.js";
-import { Draggable } from "./drag.js";
+import { CardLayout } from "./drag.js";
 import { createGlobe } from "./globe.js";
 import { renderFreshness } from "./header.js";
 import { kindFromText } from "./icons.js";
@@ -627,12 +627,26 @@ controls.addEventListener("focusout", (event) => {
 });
 $("controls-peek").addEventListener("click", () => setControlsOpen(canHover || !controls.classList.contains("open")));
 
-// The cards can be moved (drag.js): the controls by their grip or header,
-// the weather cards (together, and only sideways: they run the screen's
-// height) and the typhoon card by their grips.
-new Draggable(document.querySelector(".left-stack"), { key: "controls", handles: ".grabber, .controls-peek" });
-new Draggable(document.querySelector(".right-stack"), { key: "weather", handles: ".grabber", axis: "x" });
-new Draggable($("typhoon-card"), { key: "typhoon", handles: ".grabber, .ty-head", base: "translateX(-50%)" });
+// The cards can be moved, and share the screen without overlapping
+// (drag.js): the controls by their grip or header, the weather cards and the
+// typhoon card by their grips. Carried, the weather cards fold to their
+// headers; let go, they open again.
+function carryWeather(on) {
+  const cards = [countyCard, townCard].filter((card) => !card.hidden && !card.dataset.closing);
+  const from = new Map(cards.map((card) => [card, card.offsetHeight]));
+  document.querySelector(".right-stack").classList.toggle("carrying", on);
+  for (const card of cards) springHeight(card, from.get(card), on ? "spring-soft" : "spring", on ? 420 : 700);
+}
+const cardLayout = new CardLayout();
+cardLayout.add(document.querySelector(".left-stack"), { key: "controls", handles: ".grabber, .controls-peek" }, [controls]);
+cardLayout.add(document.querySelector(".right-stack"), {
+  key: "weather",
+  handles: ".grabber",
+  tall: true,
+  visible: () => !countyCard.hidden || !townCard.hidden,
+  carry: carryWeather,
+}, [countyCard, townCard]);
+cardLayout.add($("typhoon-card"), { key: "typhoon", handles: ".grabber, .ty-head", base: "translateX(-50%)", shift: -0.5 });
 document.addEventListener("pointerdown", (event) => {
   if (canHover || !controls.classList.contains("open")) return;
   if (!controls.contains(event.target) && !event.target.closest?.(".gselect-menu")) setControlsOpen(false);
