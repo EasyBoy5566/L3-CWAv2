@@ -338,7 +338,11 @@ function syncSimMode() {
   const on = $("buildings").checked;
   if (document.body.classList.contains("sim-mode") === on) return;
   document.body.classList.toggle("sim-mode", on);
-  if (on) return;
+  // The buildings come with temperature and rain; the other layers step aside.
+  if (on) {
+    setMode("weather");
+    return;
+  }
   setPlaying(false);
   stopSimulation();
   syncSliderToNow();
