@@ -259,41 +259,27 @@ function syncSimMode() {
   state.globe?.setTime(null);
 }
 
+// The note under the switch: a hint, the station whose weather the city
+// wears, or why the buildings could not load.
+const BUILDINGS_NOTE = "按播放鍵模擬陰影";
+function buildingsFailed(error) {
+  $("buildings").checked = false;
+  syncSimMode();
+  $("buildings-note").textContent = error.message;
+}
+
 $("buildings").addEventListener("change", async (event) => {
   const on = event.target.checked;
+  $("buildings-note").textContent = BUILDINGS_NOTE;
   syncSimMode();
   try {
     await state.globe?.setBuildings(on);
   } catch (error) {
-    event.target.checked = false;
-    syncSimMode();
-    $("buildings-note").textContent = error.message;
+    buildingsFailed(error);
   }
 });
 
-// Google's photographed cities in place of the plain OSM blocks; turning it on
-// turns the buildings on too.
-const PHOTOREAL_NOTE = "照片建模的城市（試用）";
-$("photoreal").addEventListener("change", async (event) => {
-  const on = event.target.checked;
-  // Decided now: the buildings switched off while Google loads stay off.
-  const alsoBuildings = on && !$("buildings").checked;
-  $("photoreal-note").textContent = PHOTOREAL_NOTE;
-  try {
-    await state.globe?.setPhotoreal(on);
-    if (alsoBuildings && !$("buildings").checked) {
-      $("buildings").checked = true;
-      syncSimMode();
-      await state.globe?.setBuildings(true);
-    }
-  } catch (error) {
-    event.target.checked = false;
-    $("photoreal-note").textContent = error.message;
-    await state.globe?.setPhotoreal(false).catch(() => {});
-  }
-});
-
-// The weather over Google's city: the nearest station reporting within ~15 km.
+// The weather over the city: the nearest station reporting within ~15 km.
 async function cityWeather(lon, lat) {
   try {
     const { data } = await townData.load("stations");
@@ -305,7 +291,7 @@ async function cityWeather(lon, lat) {
       if (d < best) [near, best] = [station, d];
     }
     state.globe?.setCityWeather(kindFromText(near?.wx) ?? "clear");
-    if ($("photoreal").checked) $("photoreal-note").textContent = near ? `${near.name}站：${near.wx}` : PHOTOREAL_NOTE;
+    if ($("buildings").checked) $("buildings-note").textContent = near ? `${near.name}站：${near.wx}` : BUILDINGS_NOTE;
   } catch {
     state.globe?.setCityWeather("clear");
   }
@@ -314,12 +300,12 @@ async function cityWeather(lon, lat) {
 
 // North, central and south: each preset turns the buildings on and flies to a skyline.
 new Segmented($("sim-cities"), {
-  onChange: (city) => showCity(city).catch(showError),
+  onChange: (city) => showCity(city).catch(buildingsFailed),
 });
 $("sim-cities").addEventListener("click", (event) => {
   // Picking the preset already chosen flies there again.
   const button = event.target.closest("button");
-  if (button?.getAttribute("aria-checked") === "true") showCity(button.dataset.value).catch(showError);
+  if (button?.getAttribute("aria-checked") === "true") showCity(button.dataset.value).catch(buildingsFailed);
 });
 
 async function showCity(city) {
@@ -628,7 +614,14 @@ function setPlaying(on) {
 
 $("clock-play").addEventListener("click", async () => {
   const on = $("clock-play").getAttribute("aria-pressed") !== "true";
-  if (on) await startSimulation().catch(showError);
+  if (on) {
+    try {
+      await startSimulation();
+    } catch (error) {
+      buildingsFailed(error);
+      return;
+    }
+  }
   setPlaying(on);
 });
 
@@ -815,8 +808,6 @@ async function start() {
     if (!state.globe.hasTerrain) {
       $("buildings").disabled = true;
       $("buildings-note").textContent = "需要 Cesium ion token";
-      $("photoreal").disabled = true;
-      $("photoreal-note").textContent = "需要 Cesium ion token";
       for (const button of $("sim-cities").querySelectorAll("button")) button.disabled = true;
     }
   } catch (error) {
