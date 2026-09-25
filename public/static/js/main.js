@@ -298,7 +298,7 @@ async function cityWeather(lon, lat) {
 }
 
 
-// North, central and south: each preset turns the buildings on and flies to a skyline.
+// Each preset turns the buildings on and flies to a skyline.
 new Segmented($("sim-cities"), {
   onChange: (city) => showCity(city).catch(buildingsFailed),
 });
@@ -317,7 +317,7 @@ async function showCity(city) {
 }
 
 // Play starts the shadow simulation where the map is, from the long morning
-// shadows; only the 北／中／南 presets fly anywhere. Later presses resume the
+// shadows; only the city presets fly anywhere. Later presses resume the
 // clock where it was, coming down again if the camera has gone up high.
 async function startSimulation() {
   if (!state.globe?.hasTerrain) return;

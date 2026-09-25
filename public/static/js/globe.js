@@ -22,7 +22,8 @@ const FULL_SCALE_ABOVE = 150000;
 // south looking north, so the sun is behind the viewer and shadows fall away.
 export const SHADOW_CITIES = {
   taipei: { label: "臺北 101", lon: 121.5645, lat: 25.0339, heading: 0, pitch: -24, range: 2400 },
-  kaohsiung: { label: "高雄 85 大樓", lon: 120.3006, lat: 22.6116, heading: 0, pitch: -24, range: 2200 },
+  banqiao: { label: "新板特區", lon: 121.4645, lat: 25.0135, heading: 0, pitch: -24, range: 2200 },
+  taoyuan: { label: "桃園藝文特區", lon: 121.2995, lat: 25.016, heading: 0, pitch: -26, range: 1900 },
   taichung: { label: "中興大學", lon: 120.6753, lat: 24.1231, heading: 0, pitch: -28, range: 1900 },
 };
 
