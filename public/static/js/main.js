@@ -49,7 +49,6 @@ const state = {
   hoverCounty: null,
   town: null, // the township whose card is open
   playTimer: null,
-  simCity: "taipei",
   simulating: false,
 };
 
@@ -316,10 +315,7 @@ async function cityWeather(lon, lat) {
 
 // North, central and south: each preset turns the buildings on and flies to a skyline.
 new Segmented($("sim-cities"), {
-  onChange: (city) => {
-    state.simCity = city;
-    showCity(city).catch(showError);
-  },
+  onChange: (city) => showCity(city).catch(showError),
 });
 $("sim-cities").addEventListener("click", (event) => {
   // Picking the preset already chosen flies there again.
@@ -335,16 +331,17 @@ async function showCity(city) {
   await state.globe.showCity(city);
 }
 
-// Play starts the shadow simulation over the chosen skyline, from the long
-// morning shadows; later presses pause and resume without moving the camera.
+// Play starts the shadow simulation where the map is, from the long morning
+// shadows; only the 北／中／南 presets fly anywhere. Later presses resume the
+// clock where it was, coming down again if the camera has gone up high.
 async function startSimulation() {
-  if (!state.globe?.hasTerrain || state.simulating) return;
+  if (!state.globe?.hasTerrain) return;
+  const first = !state.simulating;
   state.simulating = true;
   $("buildings").checked = true;
   syncSimMode();
-  if (state.region) closeRegion();
-  await state.globe.startShadowSimulation(state.simCity);
-  setClock(7 * 60);
+  await state.globe.startShadowSimulation();
+  if (first) setClock(7 * 60);
 }
 
 function stopSimulation() {
@@ -704,15 +701,23 @@ function toast(message) {
   toastTimer = setTimeout(() => { element.hidden = true; }, 4000);
 }
 
-// The viewer's own position: a dot on the map, and in Taiwan its township's card.
+// The viewer's own position: a dot on the map, and in Taiwan its township's
+// card. Pressed again, the dot goes.
 $("locate").addEventListener("click", () => {
   const button = $("locate");
   if (!state.globe || button.classList.contains("busy")) return;
+  if (button.getAttribute("aria-pressed") === "true") {
+    button.setAttribute("aria-pressed", "false");
+    button.title = "飛到我的位置";
+    state.globe.showHere(null);
+    return;
+  }
   if (!navigator.geolocation) return toast("這個瀏覽器不支援定位");
   button.classList.add("busy");
   navigator.geolocation.getCurrentPosition(async ({ coords }) => {
     button.classList.remove("busy");
     button.setAttribute("aria-pressed", "true");
+    button.title = "關閉定位";
     const { longitude: lon, latitude: lat, accuracy } = coords;
     state.globe.showHere(lon, lat, accuracy);
     const { county, town } = await state.globe.placeOf(lon, lat);

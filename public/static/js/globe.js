@@ -23,7 +23,7 @@ const FULL_SCALE_ABOVE = 150000;
 export const SHADOW_CITIES = {
   taipei: { label: "臺北 101", lon: 121.5645, lat: 25.0339, heading: 0, pitch: -24, range: 2400 },
   kaohsiung: { label: "高雄 85 大樓", lon: 120.3006, lat: 22.6116, heading: 0, pitch: -24, range: 2200 },
-  taichung: { label: "臺中 七期", lon: 120.6440, lat: 24.1630, heading: 0, pitch: -26, range: 2400 },
+  taichung: { label: "中興大學", lon: 120.6753, lat: 24.1231, heading: 0, pitch: -28, range: 1900 },
 };
 
 // Imagery is lit with the globe, so draped overlays darken at night; these
@@ -38,6 +38,9 @@ const TOWN_LEVEL = 350000;
 // Each highlight is a raster and a texture of its own (about 10 MB for a
 // county); only the most recent few are kept.
 const KEEP_HIGHLIGHTS = 6;
+// Play simulates the sun where the camera is; from higher than this it first
+// comes down over the middle of the view, near enough for the shadows.
+const SHADOWS_BELOW = 7000;
 // OSM Buildings would otherwise cache up to 512 MB of tiles.
 const BUILDING_CACHE_BYTES = 160 * 1024 * 1024;
 // Google's photographed cities default to a 1.5 GB cache.
@@ -364,6 +367,13 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     const c = Cesium.Cartographic.fromCartesian(cartesian);
     return [Cesium.Math.toDegrees(c.longitude), Cesium.Math.toDegrees(c.latitude)];
   };
+  // The point in the middle of the view, or null when it is sky.
+  const viewCentre = () => {
+    const middle = new Cesium.Cartesian2(scene.canvas.clientWidth / 2, scene.canvas.clientHeight / 2);
+    if (!scene.globe.show && scene.pickPositionSupported) return scene.pickPosition(middle) ?? null;
+    if (scene.mode === Cesium.SceneMode.SCENE3D) return scene.globe.pick(viewer.camera.getPickRay(middle), scene) ?? null;
+    return viewer.camera.pickEllipsoid(middle) ?? null;
+  };
   // The county under the pointer, and its township when the camera is close enough.
   const placeAt = (position) => {
     const point = lonLatAt(position);
@@ -506,6 +516,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     if (google !== googleShown) {
       googleShown = google;
       rain.show(google ? weather.rain : 0);
+      updateMeshBorders();
       if (google) reportView();
     }
   };
@@ -514,6 +525,35 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   viewer.camera.moveEnd.addEventListener(() => {
     if (googleShown) reportView();
   });
+  // ---------- borders on Google's mesh ----------
+  // The border rasters are imagery on the globe, which is hidden under
+  // Google's mesh: there the lines are drawn onto the mesh itself, every
+  // township border thin, the selected township or county bright.
+  let meshBorders = null;
+  let meshSelected = null;
+  const linesOnMesh = (lines, css, width) => scene.primitives.add(new Cesium.GroundPolylinePrimitive({
+    geometryInstances: lines.map((line) => new Cesium.GeometryInstance({
+      geometry: new Cesium.GroundPolylineGeometry({ positions: Cesium.Cartesian3.fromDegreesArray(line.flat()), width }),
+    })),
+    appearance: new Cesium.PolylineMaterialAppearance({
+      material: Cesium.Material.fromType("Color", { color: Cesium.Color.fromCssColorString(css) }),
+    }),
+    classificationType: Cesium.ClassificationType.CESIUM_3D_TILE,
+  }));
+  const outlineOnMesh = () => {
+    if (meshSelected) scene.primitives.remove(meshSelected);
+    meshSelected = null;
+    const feature = selected && (towns.find((t) => t.name === selected) ?? counties.find((c) => c.name === selected));
+    if (!feature || !googleShown) return;
+    meshSelected = linesOnMesh(feature.polygons.map((polygon) => polygon[0]), "#fde68a", 4);
+  };
+  const updateMeshBorders = () => {
+    if (googleShown && !meshBorders && towns.arcs) meshBorders = linesOnMesh(towns.arcs, "rgba(255, 255, 255, 0.72)", 2);
+    if (meshBorders) meshBorders.show = googleShown;
+    outlineOnMesh();
+    scene.requestRender();
+  };
+
   let buildingsLoading = null;
   const loadBuildings = async () => {
     const google = photoreal;
@@ -659,11 +699,19 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       );
     },
 
-    /** The skyline, with shadows cast by the buildings. */
-    async startShadowSimulation(city = "taipei") {
+    /** Shadows cast by the buildings, where the camera is; too high up, it comes down over the middle of the view. */
+    async startShadowSimulation() {
       simulating = true;
+      const centre = viewCentre();
+      if (mode2D) await this.setMode2D(false);
+      await setBuildings(true);
       applyShadows();
-      await this.showCity(city);
+      if (centre && viewer.camera.positionCartographic.height > SHADOWS_BELOW) {
+        viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(centre, 1), {
+          offset: new Cesium.HeadingPitchRange(viewer.camera.heading, Cesium.Math.toRadians(-28), 2600),
+          duration: 2.2,
+        });
+      }
     },
 
     stopShadowSimulation() {
@@ -676,6 +724,8 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       selected = town ? `${county}${town}` : county;
       standees.select(county);
       refreshHighlights();
+      outlineOnMesh();
+      scene.requestRender();
     },
 
     /** Mark stations ({ name, lon, lat }) with small dots; [] clears them. */
@@ -744,10 +794,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
         camera.setView({ orientation: level });
         return;
       }
-      const middle = new Cesium.Cartesian2(scene.canvas.clientWidth / 2, scene.canvas.clientHeight / 2);
-      const target = !scene.globe.show && scene.pickPositionSupported
-        ? scene.pickPosition(middle)
-        : scene.globe.pick(camera.getPickRay(middle), scene);
+      const target = viewCentre();
       if (!target) {
         camera.flyTo({ destination: camera.positionWC, orientation: level, duration: 0.8 });
         return;
@@ -759,9 +806,11 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       });
     },
 
-    /** Mark the viewer's own position, with a ring of its accuracy in metres. */
+    /** Mark the viewer's own position, with a ring of its accuracy in metres; null clears it. */
     showHere(lon, lat, accuracy) {
       here.entities.removeAll();
+      scene.requestRender();
+      if (lon === null) return;
       const position = Cesium.Cartesian3.fromDegrees(lon, lat);
       const blue = Cesium.Color.fromCssColorString("#3b82f6");
       if (accuracy > 30) {

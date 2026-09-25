@@ -143,7 +143,7 @@ function bbox(polygons) {
   return { west, east, south, north };
 }
 
-/** The 368 townships from TopoJSON: decode the shared arcs, rebuild each polygon. */
+/** The 368 townships from TopoJSON: decode the shared arcs, rebuild each polygon; the arcs ride along as `.arcs`. */
 export async function loadTowns(url = "/static/geo/taiwan-towns.topo.json") {
   const topology = await (await fetch(url)).json();
   const [sx, sy] = topology.transform.scale;
@@ -165,7 +165,7 @@ export async function loadTowns(url = "/static/geo/taiwan-towns.topo.json") {
     }
     return points;
   };
-  return topology.objects.towns.geometries.map((geometry) => {
+  const towns = topology.objects.towns.geometries.map((geometry) => {
     const polygons = geometry.type === "Polygon" ? [geometry.arcs.map(ring)] : geometry.arcs.map((p) => p.map(ring));
     const box = bbox(polygons);
     const { county, town } = geometry.properties;
@@ -178,6 +178,9 @@ export async function loadTowns(url = "/static/geo/taiwan-towns.topo.json") {
       center: [(box.west + box.east) / 2, (box.south + box.north) / 2],
     };
   });
+  // Every border once, each shared line a single arc: for lines drawn as geometry.
+  towns.arcs = arcs.filter((arc) => arc.length > 1);
+  return towns;
 }
 
 /** The township containing a point, looking only within its county. */
