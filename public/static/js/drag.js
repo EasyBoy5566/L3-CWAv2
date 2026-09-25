@@ -7,8 +7,9 @@
 // or right one). Cards never overlap: the card last moved, or last to grow
 // (the controls unfolding, a county opening), keeps its place and the others
 // step aside by the shortest way that is clear; each still remembers where
-// it was put and goes back there once the room is free again. Every move is
-// a spring. A double click on a grip sends the card home, where the page
+// it was put and goes back there once the room is free again. Two cards may
+// be allowed to overlap (`over`); the one last moved or grown is on top.
+// Every move is a spring. A double click on a grip sends the card home, where the page
 // puts it. Where each was put is remembered in this browser.
 import { prefersReducedMotion } from "./glass.js";
 
@@ -22,6 +23,7 @@ const FOLLOW = { stiffness: 700, damping: 46 };
 const SETTLE = { stiffness: 240, damping: 22 };
 const SUBSTEP = 1 / 240; // seconds per integration step
 const GROWTH = 24; // px a card must grow by to count as opening
+const Z_TOP = 26; // the front card's z-index; the others step down from it
 // Big enough screens only; a phone's cards have nowhere to go.
 const roomy = matchMedia("(min-width: 720px)");
 
@@ -41,8 +43,9 @@ const at = (home, offset) => ({
 });
 
 class Card {
-  constructor(layout, element, { key, handles, tall = false, shift = 0, base = "", visible = () => true, carry = null }) {
-    Object.assign(this, { layout, element, handles, tall, shift, base, visible, carry });
+  constructor(layout, element, { key, handles, tall = false, shift = 0, base = "", visible = () => true, carry = null, over = [] }) {
+    Object.assign(this, { layout, element, handles, tall, shift, base, visible, carry, over });
+    this.name = key;
     this.key = `card-offset:${key}`;
     this.wanted = this.load(); // where it was put
     this.target = { ...this.wanted }; // where it is going
@@ -207,9 +210,10 @@ export class CardLayout {
     return card;
   }
 
-  /** Put `card` first, so it keeps its place, and lay the rest out around it. */
+  /** Put `card` first, so it keeps its place and is on top, and lay the rest out around it. */
   front(card, arrange = true) {
     this.cards = [card, ...this.cards.filter((c) => c !== card)];
+    this.cards.forEach((c, i) => { c.element.style.zIndex = String(Z_TOP - i); });
     if (arrange) this.arrange();
   }
 
@@ -229,7 +233,7 @@ export class CardLayout {
     for (const card of this.cards) {
       const home = card.home();
       if (card.element.classList.contains("dragging")) {
-        if (card.shown()) placed.push(at(home, card.target));
+        if (card.shown()) placed.push({ card, rect: at(home, card.target) });
         continue;
       }
       const { minX, maxX, minY, maxY } = card.limits(home);
@@ -239,12 +243,14 @@ export class CardLayout {
         this.move(card, wanted);
         continue;
       }
-      const clear = (o) => !placed.some((p) => overlaps(at(home, o), p));
+      // What this card may not overlap: every card placed, but those it may go over.
+      const blocking = placed.filter((p) => !card.over.includes(p.card.name) && !p.card.over.includes(card.name)).map((p) => p.rect);
+      const clear = (o) => !blocking.some((r) => overlaps(at(home, o), r));
       let best = wanted;
       if (!clear(wanted)) {
         const distance = (o) => Math.hypot(o.x - wanted.x, o.y - wanted.y);
         // Beside each card in the way, then beside what that meets in turn.
-        const around = (o) => placed.flatMap((p) => [
+        const around = (o) => blocking.flatMap((p) => [
           { x: p.left - GAP - home.width - home.left, y: o.y },
           { x: p.right + GAP - home.left, y: o.y },
           { x: o.x, y: p.top - GAP - home.height - home.top },
@@ -254,7 +260,7 @@ export class CardLayout {
         const options = [...first, ...first.filter((o) => !clear(o)).flatMap(around)].filter(clear);
         if (options.length) best = options.reduce((a, b) => (distance(b) < distance(a) ? b : a));
       }
-      placed.push(at(home, best));
+      placed.push({ card, rect: at(home, best) });
       this.move(card, best);
     }
   }

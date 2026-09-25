@@ -114,8 +114,16 @@ function showTown(town) {
   else closeTownCard();
 }
 
+// A county or township picked on the map or in the menu shows temperature
+// and rain. (One opened from an alert keeps the alert's layer.)
+function pickRegion(name, options) {
+  if (name) setMode("weather");
+  openRegion(name, options);
+}
+
 function openRegion(name, { push = true, fly = true, origin = null, town = null } = {}) {
   if (!name) return closeRegion({ push });
+  setWeatherFolded(false);
   if (state.region !== name) {
     state.view?.dispose();
     state.region = name;
@@ -631,8 +639,41 @@ controls.addEventListener("focusout", (event) => {
 });
 $("controls-peek").addEventListener("click", () => setControlsOpen(canHover || !controls.classList.contains("open")));
 
+// ---------- the weather cards fold when left alone ----------
+// Like the controls: open while the pointer (or the keyboard) is on them, and
+// folded to their headers a moment after it leaves, or when the map is
+// dragged or tapped. Picking a county or township opens them.
+const weatherStack = document.querySelector(".right-stack");
+let weatherTimer = 0;
+function setWeatherFolded(folded) {
+  clearTimeout(weatherTimer);
+  if (weatherStack.classList.contains("folded") === folded) return;
+  const cards = [countyCard, townCard].filter((card) => !card.hidden && !card.dataset.closing);
+  const from = new Map(cards.map((card) => [card, card.offsetHeight]));
+  weatherStack.classList.toggle("folded", folded);
+  for (const card of cards) springHeight(card, from.get(card), folded ? "spring-soft" : "spring", folded ? 520 : 700);
+}
+// Kept open while a keyboard user or an open menu is in them, or while carried.
+const weatherBusy = () => Boolean(weatherStack.querySelector(":focus-visible, .gselect.open")) || weatherStack.classList.contains("carrying");
+function foldWeatherSoon() {
+  clearTimeout(weatherTimer);
+  weatherTimer = setTimeout(() => (weatherBusy() ? foldWeatherSoon() : setWeatherFolded(true)), 400);
+}
+for (const card of [countyCard, townCard]) {
+  if (canHover) {
+    card.addEventListener("pointerenter", () => setWeatherFolded(false));
+    card.addEventListener("pointerleave", (event) => {
+      if (!weatherStack.contains(event.relatedTarget)) foldWeatherSoon();
+    });
+  }
+  card.querySelector(".card-peek").addEventListener("click", () => setWeatherFolded(false));
+}
+$("globe").addEventListener("pointerdown", () => {
+  if (!countyCard.hidden) foldWeatherSoon();
+});
+
 // The cards can be moved, and share the screen without overlapping
-// (drag.js): the controls by their grip or header, the weather cards and the
+// (drag.js), but for the controls, which may lie over the weather cards: the controls by their grip or header, the weather cards and the
 // typhoon card by their grips. Carried, the weather cards fold to their
 // headers; let go, they open again.
 function carryWeather(on) {
@@ -642,7 +683,7 @@ function carryWeather(on) {
   for (const card of cards) springHeight(card, from.get(card), on ? "spring-soft" : "spring", on ? 420 : 700);
 }
 const cardLayout = new CardLayout();
-cardLayout.add(document.querySelector(".left-stack"), { key: "controls", handles: ".grabber, .controls-peek" }, [controls]);
+cardLayout.add(document.querySelector(".left-stack"), { key: "controls", handles: ".grabber, .controls-peek", over: ["weather"] }, [controls]);
 cardLayout.add(document.querySelector(".right-stack"), {
   key: "weather",
   handles: ".grabber",
@@ -695,7 +736,7 @@ $("date").addEventListener("change", (event) => {
 $("date-prev").addEventListener("click", () => stepDate(-1));
 $("date-next").addEventListener("click", () => stepDate(1));
 
-$("county").addEventListener("change", (event) => openRegion(event.target.value));
+$("county").addEventListener("change", (event) => pickRegion(event.target.value));
 $("panel-close").addEventListener("click", () => closeRegion());
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && state.region) closeRegion();
@@ -906,7 +947,7 @@ async function start() {
       counties: JSON.parse($("county-points").textContent),
       onHover: showHover,
       onInfo: showInfo,
-      onSelect: (name, position, town) => openRegion(name, { origin: position, town }),
+      onSelect: (name, position, town) => pickRegion(name, { origin: position, town }),
       onMode: syncModeButton,
       onTyphoon: (index) => typhoonCard.focus(index),
       onCityView: cityWeather,

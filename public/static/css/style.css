@@ -355,7 +355,7 @@ input[type="range"]::-moz-range-thumb {
   z-index: 10;
   top: var(--top);
   left: 12px;
-  width: 272px;
+  width: var(--panel-w); /* as wide as the weather cards */
   max-height: calc(100vh - var(--top) - 16px);
   display: flex;
   flex-direction: column;
@@ -1028,8 +1028,8 @@ body.page-region { background: transparent; }
   position: absolute;
   z-index: 12;
   bottom: 16px;
-  left: calc((296px + 100vw - 12px) / 2);
-  width: min(620px, calc(100vw - 332px));
+  left: calc((var(--panel-w) + 24px + 100vw - 12px) / 2);
+  width: min(620px, calc(100vw - var(--panel-w) - 60px));
   transform: translateX(-50%);
   --radius: 26px;
   --ty: #fb923c;
@@ -1040,8 +1040,8 @@ body.page-region { background: transparent; }
 }
 .typhoon-card[hidden] { display: none; }
 .panel-open .typhoon-card {
-  left: calc((296px + 100vw - var(--panel-w) - 24px) / 2);
-  width: min(620px, calc(100vw - var(--panel-w) - 344px));
+  left: 50%; /* between the controls and the weather cards, of one width */
+  width: min(620px, calc(100vw - 2 * var(--panel-w) - 72px));
 }
 .ty-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .ty-badge { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; }
@@ -1369,15 +1369,18 @@ body.sim-mode .bar-slot .ticker { opacity: 0; translate: 0 -10px; visibility: hi
 
 /* ---------- folded cards: a one-line header ---------- */
 .card-peek { display: none; }
-.right-stack > .collapsed, .right-stack.carrying > .glass { flex: 0 0 auto; min-height: 0; }
+.right-stack > .collapsed, .right-stack.carrying > .glass, .right-stack.folded > .glass { flex: 0 0 auto; min-height: 0; }
 .right-stack > .collapsed .panel-body,
 .right-stack > .collapsed .town-scroll,
 .right-stack.carrying .panel-body,
-.right-stack.carrying .town-scroll { display: none; }
-/* Carried (drag.js), the weather cards fold to their headers. */
-.right-stack.carrying { bottom: auto; }
+.right-stack.carrying .town-scroll,
+.right-stack.folded .panel-body,
+.right-stack.folded .town-scroll { display: none; }
+/* Carried (drag.js) or left alone (main.js), the weather cards fold to their headers. */
+.right-stack.carrying, .right-stack.folded { bottom: auto; }
 .right-stack > .collapsed .card-peek,
-.right-stack.carrying .card-peek {
+.right-stack.carrying .card-peek,
+.right-stack.folded .card-peek {
   display: flex;
   align-items: center;
   gap: 8px;
