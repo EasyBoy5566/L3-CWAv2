@@ -731,14 +731,14 @@ function showError(error) {
 // ---------- the weather ticker ----------
 const ticker = new Ticker($("ticker"), {
   onPick: (alert) => {
-    if (alert.category === "typhoon") {
-      const input = document.querySelector('input[data-overlay="typhoon"]');
-      if (!input.checked) {
-        input.checked = true;
-        input.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-      return;
+    // A typhoon, wind or air alert turns its map layer on, as the switch would.
+    const layer = { typhoon: "typhoon", wind: "wind", air: "air" }[alert.category];
+    const input = layer && document.querySelector(`input[data-overlay="${layer}"]`);
+    if (input && !input.checked) {
+      input.checked = true;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
     }
+    if (alert.category === "typhoon") return;
     if (alert.counties?.length) openRegion(alert.counties[0]);
   },
 });

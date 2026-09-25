@@ -1,4 +1,8 @@
-"""The optional map overlays: fetched from CWA on demand, reduced, and cached.
+"""The optional map overlays: fetched on demand, reduced, and cached.
+
+Most come from CWA; the wind field and, without a MOENV key, the air quality
+come from Open-Meteo, whose free tier counts every grid point as a call: the
+hour-long cache keeps the wind's 225 points to a few thousand calls a day.
 
 They are not written to the database. Each one is a live view of a single
 dataset, so the function keeps the reduced payload in memory for a few
@@ -13,6 +17,8 @@ import time
 
 from app import config
 from app.errors import WeatherParseError
+from etl import opendata
+from etl.counties import COUNTIES
 from etl.cwa import fetch_dataset
 from etl.parsers import overlays as parse
 
@@ -24,6 +30,8 @@ TTL = {
     "heat": 3600,
     "uv": 3600,
     "townships": 1800,
+    "wind": 3600,
+    "air": 1800,
 }
 
 _cache: dict[str, tuple[float, dict]] = {}
@@ -89,7 +97,26 @@ def _townships() -> dict:
     return {"towns": parse.parse_townships(documents, config.now())}
 
 
-NAMES = ("rain", "stations", "typhoon", "heat", "uv", "townships")
+def _wind() -> dict:
+    grid = config.WIND_GRID
+    results = opendata.open_meteo(config.OPEN_METEO_FORECAST_URL, parse.wind_points(grid), {
+        "current": "wind_speed_10m,wind_direction_10m",
+        "wind_speed_unit": "ms",
+    })
+    return parse.parse_wind_grid(results, grid)
+
+
+def _air() -> dict:
+    if config.moenv_api_key():
+        return parse.parse_moenv_aqi(opendata.moenv(config.AQI_DATASET))
+    places = [(name, lat, lon) for name, (lat, lon) in COUNTIES.items()]
+    results = opendata.open_meteo(config.OPEN_METEO_AIR_URL, [(lat, lon) for _, lat, lon in places], {
+        "current": ",".join(["us_aqi", "pm2_5", "pm10", *parse.MODEL_POLLUTANTS]),
+    })
+    return parse.parse_model_air(results, places)
+
+
+NAMES = ("rain", "stations", "typhoon", "heat", "uv", "townships", "wind", "air")
 
 
 def overlay(name: str, database) -> dict:
@@ -100,6 +127,8 @@ def overlay(name: str, database) -> dict:
         "heat": _heat,
         "uv": lambda: _uv(database),
         "townships": _townships,
+        "wind": _wind,
+        "air": _air,
     }
     if name not in builders:
         raise WeatherParseError("沒有這個圖層。")

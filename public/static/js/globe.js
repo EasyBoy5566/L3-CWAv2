@@ -441,10 +441,11 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       return;
     }
     const hit = dataLayers.hit(picked);
-    if (hit) {
+    if (hit?.name === "typhoon") {
       if (hit.cyclone !== undefined) onTyphoon?.(hit.cyclone);
       return; // the typhoon has no county
     }
+    // An air quality station opens the county it stands in.
     const { county, town } = placeAt(click.position);
     if (county) onSelect?.(county, { x: click.position.x, y: click.position.y }, town);
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);

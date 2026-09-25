@@ -35,6 +35,17 @@ TOWNSHIP_DATASET = "F-D0047-093"
 TOWNSHIP_LOCATION_IDS = [f"F-D0047-{n:03d}" for n in range(1, 86, 4)]
 TOWNSHIP_ELEMENTS = ["溫度", "天氣現象", "3小時降雨機率"]
 
+# The wind field: Open-Meteo's 10 m wind on a half-degree grid over Taiwan
+# and its seas (15 × 15 points, one request). CWA publishes no wind grid.
+OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+WIND_GRID = {"lon0": 117.5, "lat0": 20.5, "step": 0.5, "nx": 15, "ny": 15}
+
+# Air quality: MOENV's stations (aqx_p_432) when MOENV_API_KEY is set, and
+# otherwise Open-Meteo's CAMS model at each county's point.
+MOENV_API_BASE_URL = "https://data.moenv.gov.tw/api/v2"
+AQI_DATASET = "aqx_p_432"
+OPEN_METEO_AIR_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
+
 REQUEST_TIMEOUT = 15
 # A visitor's request waits on this one, so it is shorter than the cron timeout.
 READ_THROUGH_TIMEOUT = 8
@@ -74,6 +85,11 @@ def _env(name: str) -> str:
 
 def cwa_api_key() -> str:
     return _env("CWA_API_KEY")
+
+
+def moenv_api_key() -> str:
+    """Free from data.moenv.gov.tw; without it the air layer falls back to the model."""
+    return _env("MOENV_API_KEY")
 
 
 def turso_database_url() -> str:

@@ -2,19 +2,106 @@
 // /api/overlays/<name> when its switch is turned on. Station and township
 // datasets are not layers any more: they feed the township card
 // (town-data.js), and the selected township's stations are dots (globe.js).
-// The typhoon is the one dataset that belongs on the map.
+// The typhoon, the wind field and the air quality are the ones that belong
+// on the map.
 /* global Cesium */
 import { getJSON } from "./api.js";
 import { addCloudLayer, latestCloudTime } from "./clouds.js";
 import { beaufortLevel, cycloneClass, directionName } from "./cyclone.js";
+import { WindField } from "./wind.js";
 
 const color = (css, alpha = 1) => Cesium.Color.fromCssColorString(css).withAlpha(alpha);
 const num = (value, digits = 1, unit = "") => (value === null || value === undefined ? "—" : `${Number(value).toFixed(digits)}${unit}`);
 // "2026-09-24T14:00:00+08:00" → "9/24 14:00", in the timestamp's own (Taipei) time.
 const dayTime = (iso) => `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))} ${iso.slice(11, 16)}`;
 
+// MOENV's AQI categories: the upper bound of each, its name and colours.
+const AQI_LEVELS = [
+  [50, "良好", "#00e400", "#0b1220"],
+  [100, "普通", "#ffff00", "#0b1220"],
+  [150, "對敏感族群不健康", "#ff7e00", "#0b1220"],
+  [200, "對所有族群不健康", "#ff0000", "#ffffff"],
+  [300, "非常不健康", "#8f3f97", "#ffffff"],
+  [Infinity, "危害", "#7e0023", "#ffffff"],
+];
+const aqiLevel = (aqi) => AQI_LEVELS.find(([limit]) => aqi <= limit);
+
+// A station's AQI in a disc of its category's colour, drawn at twice the
+// size it is shown so it stays sharp; one image per value.
+const aqiImages = new Map();
+function aqiImage(aqi) {
+  const value = Math.round(aqi);
+  if (aqiImages.has(value)) return aqiImages.get(value);
+  const [, , fill, ink] = aqiLevel(value);
+  const size = 56;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const context = canvas.getContext("2d");
+  context.beginPath();
+  context.arc(size / 2, size / 2, size / 2 - 3, 0, Math.PI * 2);
+  context.fillStyle = fill;
+  context.fill();
+  context.lineWidth = 3;
+  context.strokeStyle = "rgba(8, 13, 28, 0.75)";
+  context.stroke();
+  context.fillStyle = ink;
+  context.font = `700 ${value >= 100 ? 21 : 24}px 'Noto Sans TC', 'Microsoft JhengHei', sans-serif`;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(String(value), size / 2, size / 2 + 1);
+  aqiImages.set(value, canvas);
+  return canvas;
+}
+
 // Layer definitions: what each draws, and what its hover card says.
 const DEFINITIONS = {
+  wind: {
+    // Nothing to pick: the particles are a canvas of their own over the globe.
+    animate: (viewer, data) => new WindField(viewer, data),
+    build(_source, data) {
+      const level = beaufortLevel(data.max);
+      return `平均 ${num(data.mean)} · 最大 ${num(data.max)} m/s${level === null ? "" : `（${level} 級）`}${data.time ? ` · ${data.time.slice(11, 16)}` : ""}`;
+    },
+    info: () => null,
+  },
+  air: {
+    build(source, data) {
+      if (!data.stations.length) return "目前沒有空氣品質資料";
+      const model = data.source === "model";
+      for (const row of data.stations) {
+        source.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(row.lon, row.lat),
+          properties: { overlay: "air", row: { ...row, model } },
+          billboard: {
+            image: aqiImage(row.aqi),
+            scale: 0.5,
+            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            scaleByDistance: new Cesium.NearFarScalar(1.5e5, 1.1, 1.5e6, 0.6),
+            // The model's points are the counties' own, where the county
+            // signs stand: the disc steps to the left of the sign.
+            ...(model ? { horizontalOrigin: Cesium.HorizontalOrigin.RIGHT, pixelOffset: new Cesium.Cartesian2(-16, 0) } : {}),
+          },
+        });
+      }
+      const worst = data.stations.reduce((a, b) => (b.aqi > a.aqi ? b : a));
+      const where = model ? worst.county : `${worst.county ?? ""}${worst.name}`;
+      return `${model ? "模式估計" : `${data.stations.length} 站`} · 最高 ${where} ${Math.round(worst.aqi)}`;
+    },
+    info(row) {
+      const lines = [["AQI", `${Math.round(row.aqi)}`]];
+      if (row.pm25 !== null) lines.push(["PM2.5", num(row.pm25, 0, " µg/m³")]);
+      if (row.pm10 !== null) lines.push(["PM10", num(row.pm10, 0, " µg/m³")]);
+      if (row.o3 !== null) lines.push(["臭氧", num(row.o3, 0, " ppb")]);
+      if (row.pollutant) lines.push(["主要污染物", row.pollutant]);
+      const place = row.model ? row.county : `${row.name}測站${row.county ? ` · ${row.county}` : ""}`;
+      return {
+        title: `${place} · ${row.status ?? aqiLevel(row.aqi)[1]}`,
+        sub: `${row.time ? dayTime(row.time) : ""} ${row.model ? "模式估計（CAMS）" : "環境部觀測"}`.trim(),
+        lines,
+      };
+    },
+  },
   typhoon: {
     // The satellite picture's time, asked for before anything is drawn.
     prepare: async (data) => ({ cloudTime: data.cyclones.length ? await latestCloudTime() : null }),
@@ -305,10 +392,11 @@ export class Overlays {
     this.brightness = 1;
   }
 
-  // Drop a layer's data source and its imagery (the typhoon's cloud).
+  // Drop a layer's data source, its imagery (the typhoon's cloud) and its animation (the wind).
   discard(layer) {
     this.viewer.dataSources.remove(layer.source, true);
     for (const imagery of layer.imagery) this.viewer.imageryLayers.remove(imagery, true);
+    layer.animation?.destroy();
   }
 
   isOn(name) {
@@ -340,7 +428,8 @@ export class Overlays {
     const imagery = definition.imagery?.(this.viewer, data, prepared) ?? [];
     for (const layer of imagery) layer.brightness = this.brightness;
     if (previous) this.discard(previous);
-    this.active.set(name, { source, status, data, imagery, ...prepared });
+    const animation = definition.animate?.(this.viewer, data) ?? null;
+    this.active.set(name, { source, status, data, imagery, animation, ...prepared });
     this.dimClouds();
     if (definition.fly && !previous) this.frame(definition.points?.(data) ?? []);
     this.viewer.scene.requestRender();

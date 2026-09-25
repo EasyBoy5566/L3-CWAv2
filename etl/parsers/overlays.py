@@ -5,6 +5,7 @@ reduces a CWA document to the few fields the globe draws, as plain dicts with
 short keys, because the station layers run to over a thousand points.
 """
 
+import math
 from datetime import datetime, timedelta
 
 from app.config import TAIPEI
@@ -267,3 +268,147 @@ def parse_townships(documents: list[dict], now: datetime) -> list[dict]:
     if not rows:
         raise WeatherParseError("鄉鎮預報中沒有有效的鄉鎮。")
     return rows
+
+
+# ---------- beyond CWA ----------
+
+def _minute(value) -> str | None:
+    """Open-Meteo's '2026-09-26T00:15', in the Taipei time the request asked for."""
+    if not isinstance(value, str):
+        return None
+    try:
+        return iso(datetime.strptime(value.strip(), "%Y-%m-%dT%H:%M").replace(tzinfo=TAIPEI))
+    except ValueError:
+        return None
+
+
+def wind_points(grid: dict) -> list[tuple[float, float]]:
+    """The grid's (lat, lon) points, west to east along each row, rows south to north."""
+    return [(grid["lat0"] + j * grid["step"], grid["lon0"] + i * grid["step"])
+            for j in range(grid["ny"]) for i in range(grid["nx"])]
+
+
+def parse_wind_grid(results: list[dict], grid: dict) -> dict:
+    """Open-Meteo's current 10 m wind at each grid point, as east (u) and north (v) m/s.
+
+    CWA and Open-Meteo give the direction the wind comes from; u and v are
+    where it goes, which is what the particles follow.
+    """
+    u, v, times = [], [], []
+    for result in results:
+        current = result.get("current") if isinstance(result.get("current"), dict) else {}
+        speed = number(current.get("wind_speed_10m"), 0, 120)
+        direction = number(current.get("wind_direction_10m"), 0, 360)
+        if speed is None or direction is None:
+            u.append(None)
+            v.append(None)
+            continue
+        radians = math.radians(direction)
+        u.append(round(-speed * math.sin(radians), 2))
+        v.append(round(-speed * math.cos(radians), 2))
+        times.append(_minute(current.get("time")))
+    if not any(value is not None for value in u):
+        raise WeatherParseError("風場資料中沒有有效的格點。")
+    speeds = [math.hypot(a, b) for a, b in zip(u, v) if a is not None]
+    return {"time": max((t for t in times if t), default=None), "grid": grid, "u": u, "v": v,
+            "max": round(max(speeds), 1), "mean": round(sum(speeds) / len(speeds), 1)}
+
+
+# MOENV's categories: the upper bound of each, its name and its colour.
+AQI_LEVELS = [
+    (50, "良好", "#00e400"),
+    (100, "普通", "#ffff00"),
+    (150, "對敏感族群不健康", "#ff7e00"),
+    (200, "對所有族群不健康", "#ff0000"),
+    (300, "非常不健康", "#8f3f97"),
+    (500, "危害", "#7e0023"),
+]
+
+
+def aqi_status(aqi: float | None) -> str | None:
+    if aqi is None:
+        return None
+    return next((name for limit, name, _ in AQI_LEVELS if aqi <= limit), AQI_LEVELS[-1][1])
+
+
+def _moenv_time(value) -> str | None:
+    """'2026/09/26 00:00:00', local time."""
+    if not isinstance(value, str):
+        return None
+    try:
+        return iso(datetime.strptime(value.strip(), "%Y/%m/%d %H:%M:%S").replace(tzinfo=TAIPEI))
+    except ValueError:
+        return None
+
+
+def parse_moenv_aqi(raw_json: dict) -> dict:
+    """MOENV aqx_p_432: every air quality station's AQI and pollutants this hour."""
+    records = raw_json.get("records") if isinstance(raw_json, dict) else None
+    if not isinstance(records, list):
+        raise WeatherParseError("空氣品質資料格式不符：缺少 records。")
+    rows = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        lat = number(record.get("latitude"), 10, 27)
+        lon = number(record.get("longitude"), 114, 123)
+        aqi = number(record.get("aqi"), 0, 500)
+        if lat is None or lon is None or aqi is None:
+            continue  # a station under maintenance reports no AQI
+        rows.append({
+            "id": text(record.get("siteid")),
+            "name": text(record.get("sitename")),
+            "county": (text(record.get("county")) or "").replace("台", "臺") or None,
+            "lat": lat,
+            "lon": lon,
+            "aqi": aqi,
+            "status": text(record.get("status")) or aqi_status(aqi),
+            "pollutant": text(record.get("pollutant")),
+            "pm25": number(record.get("pm2.5"), 0, 1000),
+            "pm10": number(record.get("pm10"), 0, 2000),
+            "o3": number(record.get("o3"), 0, 1000),
+            "time": _moenv_time(record.get("publishtime")),
+        })
+    if not rows:
+        raise WeatherParseError("空氣品質資料中沒有有效的測站。")
+    return {"source": "moenv", "time": max((r["time"] for r in rows if r["time"]), default=None), "stations": rows}
+
+
+# Open-Meteo's per-pollutant AQI fields, and MOENV's name for each.
+MODEL_POLLUTANTS = {
+    "us_aqi_pm2_5": "細懸浮微粒",
+    "us_aqi_pm10": "懸浮微粒",
+    "us_aqi_ozone": "臭氧",
+    "us_aqi_nitrogen_dioxide": "二氧化氮",
+}
+
+
+def parse_model_air(results: list[dict], places: list[tuple[str, float, float]]) -> dict:
+    """Open-Meteo's CAMS estimate at each county's point. Its US AQI uses the
+    same breakpoints and categories as MOENV's AQI."""
+    rows = []
+    for (county, lat, lon), result in zip(places, results):
+        current = result.get("current") if isinstance(result.get("current"), dict) else {}
+        aqi = number(current.get("us_aqi"), 0, 500)
+        if aqi is None:
+            continue
+        parts = {name: number(current.get(field), 0, 500) for field, name in MODEL_POLLUTANTS.items()}
+        worst = max((p for p in parts.items() if p[1] is not None), key=lambda p: p[1], default=None)
+        rows.append({
+            "id": county,
+            "name": county,
+            "county": county,
+            "lat": lat,
+            "lon": lon,
+            "aqi": aqi,
+            "status": aqi_status(aqi),
+            # MOENV names the pollutant only once the air is worse than 良好.
+            "pollutant": worst[0] if worst and aqi > 50 else None,
+            "pm25": number(current.get("pm2_5"), 0, 1000),
+            "pm10": number(current.get("pm10"), 0, 2000),
+            "o3": None,
+            "time": _minute(current.get("time")),
+        })
+    if not rows:
+        raise WeatherParseError("空氣品質模式資料中沒有有效的點。")
+    return {"source": "model", "time": max((r["time"] for r in rows if r["time"]), default=None), "stations": rows}

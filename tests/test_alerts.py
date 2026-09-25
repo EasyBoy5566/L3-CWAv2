@@ -88,3 +88,35 @@ def test_the_whole_ticker_over_the_sample_database(monkeypatch, loaded, clock):
     assert kinds == sorted(kinds, key=lambda k: k != "official")
     assert all(a["text"] and a["id"] for a in payload["alerts"])
     module.clear_cache()
+
+
+def test_gusts_now_skip_the_mountains():
+    from app.alerts import derived_from_gusts
+
+    stations = [
+        {"county": "臺東縣", "town": "蘭嶼鄉", "alt": 324, "ws": 12, "gust": 25.1},
+        {"county": "臺東縣", "town": "成功鎮", "alt": 30, "ws": 8, "gust": 18},
+        {"county": "南投縣", "town": "信義鄉", "alt": 3844, "ws": 20, "gust": 30},  # 玉山
+        {"county": "臺北市", "town": "中正區", "alt": 5, "ws": 3, "gust": 9},
+    ]
+    (alert,) = derived_from_gusts(stations)
+    assert alert["counties"] == ["臺東縣"] and alert["level"] == 2
+    assert alert["text"].startswith("目前 臺東縣蘭嶼鄉 陣風 10 級")
+
+
+def test_unhealthy_air_is_grouped_by_category():
+    from app.alerts import derived_from_air
+
+    stations = [
+        {"county": "高雄市", "aqi": 160, "pollutant": "細懸浮微粒"},
+        {"county": "高雄市", "aqi": 120, "pollutant": "臭氧八小時"},
+        {"county": "臺南市", "aqi": 105, "pollutant": "臭氧八小時"},
+        {"county": "屏東縣", "aqi": 118, "pollutant": None},
+        {"county": "臺北市", "aqi": 60, "pollutant": None},
+    ]
+    red, orange = derived_from_air({"source": "moenv", "stations": stations})
+    assert red["counties"] == ["高雄市"] and red["level"] == 2
+    assert red["text"] == "目前 高雄市空氣品質對所有族群不健康（AQI 160，主要為細懸浮微粒），所有人減少戶外活動，外出戴口罩"
+    assert orange["counties"] == ["臺南市", "屏東縣"] and "（AQI 118）" in orange["text"] and "主要為" not in orange["text"]
+    model = derived_from_air({"source": "model", "stations": stations[:1]})
+    assert model[0]["text"].startswith("預估 ")

@@ -836,6 +836,29 @@ body.page-region { background: transparent; }
 .toggle-text small { font-size: 11px; color: var(--faint); }
 .toggle.busy small { color: var(--accent); }
 .toggle.error small { color: var(--alert); }
+
+/* A layer's colour key, under its switch while the layer is on. */
+.legend { display: none; position: relative; margin-top: 5px; font-size: 10px; color: var(--faint); }
+.toggle input:checked ~ .toggle-text .legend { display: block; }
+.legend i { display: block; height: 5px; border-radius: 3px; }
+/* The wind bands of wind.js over 0–20 m/s. */
+.wind-legend { height: 21px; }
+.wind-legend i {
+  background: linear-gradient(90deg, #bae6fd 0 10%, #7dd3fc 10% 20%, #5eead4 20% 30%, #a3e635 30% 40%,
+    #facc15 40% 54%, #fb923c 54% 69.5%, #f87171 69.5% 86%, #e879f9 86%);
+}
+.wind-legend span { position: absolute; top: 8px; white-space: nowrap; }
+/* MOENV's six AQI categories, each labelled at its lower bound. */
+.aqi-legend { display: none; grid-template-columns: repeat(6, 1fr); row-gap: 3px; }
+.toggle input:checked ~ .toggle-text .aqi-legend { display: grid; }
+.aqi-legend i {
+  grid-column: 1 / -1;
+  background: linear-gradient(90deg, #00e400 0 16.67%, #ffff00 16.67% 33.33%, #ff7e00 33.33% 50%, #ff0000 50% 66.67%,
+    #8f3f97 66.67% 83.33%, #7e0023 83.33%);
+}
+
+/* wind.js draws its particles here, over the globe and under everything else. */
+.wind-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .toggle input:disabled ~ * { opacity: 0.45; }
 .toggle input:disabled ~ .toggle-text { cursor: default; }
 

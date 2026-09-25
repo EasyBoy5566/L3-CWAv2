@@ -9,9 +9,9 @@ Two kinds:
   per-county list, W-C0033-001.
 - Derived: what the stored forecasts and live readings imply, in the same
   plain words: thunderstorms and likely rain, apparent heat, strong wind, UV,
-  cold and wide day-night swings, heavy rain falling now, the typhoon's
-  closest approach; and, so the ticker is never empty, the day's hottest and
-  wettest counties.
+  cold and wide day-night swings, heavy rain falling now, strong gusts
+  blowing now, unhealthy air, the typhoon's closest approach; and, so the
+  ticker is never empty, the day's hottest and wettest counties.
 
 Each alert: {id, kind, category, level (1-3), title, text, counties, at, until}.
 """
@@ -295,6 +295,62 @@ def derived_from_rain(stations: list[dict]) -> list[dict]:
     return alerts
 
 
+def derived_from_gusts(stations: list[dict]) -> list[dict]:
+    """Strong wind blowing now, from the hourly stations: a gust of 8 級 or a
+    mean wind of 7 級. Mountain stations are left out; their wind is not the
+    towns'."""
+    worst: dict[str, tuple[float, dict]] = {}
+    for s in stations:
+        if not s.get("county") or (s.get("alt") or 0) >= config.HIGH_ALTITUDE_METRES:
+            continue
+        gust, mean = s.get("gust") or 0, s.get("ws") or 0
+        if gust < 17.2 and mean < 13.9:
+            continue
+        strength = max(gust, mean)
+        if strength > worst.get(s["county"], (-1, None))[0]:
+            worst[s["county"]] = (strength, s)
+    alerts = []
+    for county, (strength, s) in sorted(worst.items(), key=lambda item: -item[1][0])[:3]:
+        level = _beaufort(strength)
+        what = "陣風" if (s.get("gust") or 0) >= (s.get("ws") or 0) else "平均風"
+        alerts.append({"category": "wind", "level": 3 if level >= 12 else 2 if level >= 10 else 1, "title": "強風",
+                       "text": f"目前 {county}{s.get('town') or ''} {what} {level} 級（{round(strength)} m/s），注意高處墜物與行車安全",
+                       "counties": [county]})
+    return alerts
+
+
+# AQI from which an alert is due, with what it says: MOENV's advice, shortened.
+AIR_ADVICE = [
+    (301, 3, "危害", "所有人應避免戶外活動"),
+    (201, 3, "非常不健康", "所有人應減少戶外活動"),
+    (151, 2, "對所有族群不健康", "所有人減少戶外活動，外出戴口罩"),
+    (101, 1, "對敏感族群不健康", "敏感族群減少戶外活動"),
+]
+
+
+def derived_from_air(payload: dict) -> list[dict]:
+    """Unhealthy air now, per county at its worst station, one alert per category."""
+    worst: dict[str, dict] = {}
+    for s in payload.get("stations") or []:
+        if s.get("county") in COUNTIES and (s.get("aqi") or 0) > worst.get(s["county"], {}).get("aqi", -1):
+            worst[s["county"]] = s
+    model = payload.get("source") == "model"
+    alerts = []
+    for floor, level, status, advice in AIR_ADVICE:
+        ceiling = next((f for f, *_ in reversed(AIR_ADVICE) if f > floor), 501)
+        hits = {c: s for c, s in worst.items() if floor <= s["aqi"] < ceiling}
+        if not hits:
+            continue
+        top = max(s["aqi"] for s in hits.values())
+        pollutant = next((s["pollutant"] for s in hits.values() if s["aqi"] == top and s.get("pollutant")), None)
+        cause = f"，主要為{pollutant}" if pollutant else ""
+        now = "預估" if model else "目前"
+        alerts.append({"category": "air", "level": level, "title": "空氣品質",
+                       "text": f"{now} {places(list(hits))}空氣品質{status}（AQI {round(top)}{cause}），{advice}",
+                       "counties": [c for c in COUNTIES if c in hits]})
+    return alerts
+
+
 def _km(lat1, lon1, lat2, lon2):
     rad = math.pi / 180
     a = math.sin((lat2 - lat1) * rad / 2) ** 2 + math.cos(lat1 * rad) * math.cos(lat2 * rad) * math.sin((lon2 - lon1) * rad / 2) ** 2
@@ -343,6 +399,14 @@ def _fetch_all(database) -> list[dict]:
     derived = [a for a in derived if not (a["category"] == "heat" and set(a["counties"]) <= official_heat)]
     try:
         derived += derived_from_rain(overlays.overlay("rain", database)["stations"])
+    except (WeatherError, KeyError):
+        pass
+    try:
+        derived += derived_from_gusts(overlays.overlay("stations", database)["stations"])
+    except (WeatherError, KeyError):
+        pass
+    try:
+        derived += derived_from_air(overlays.overlay("air", database))
     except (WeatherError, KeyError):
         pass
     try:

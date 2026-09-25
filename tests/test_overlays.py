@@ -6,16 +6,26 @@ from etl.parsers import overlays as parse
 from tests.conftest import FROZEN
 
 
+def model_point(**current):
+    return {"current": {"time": "2026-09-24T14:15", **current}}
+
+
 @pytest.fixture
 def fake_cwa(monkeypatch, samples):
-    """Serve overlay datasets from the samples; count calls per dataset."""
+    """Serve overlay datasets from the samples, and Open-Meteo from made-up
+    points; count calls per dataset."""
     calls = []
 
     def fetch(dataset_id, params=None, timeout=None):
         calls.append((dataset_id, dict(params or {})))
         return samples(dataset_id)
 
+    def open_meteo(url, points, params):
+        calls.append((url, dict(params)))
+        return [model_point(wind_speed_10m=5, wind_direction_10m=45, us_aqi=60, pm2_5=20, us_aqi_pm2_5=60) for _ in points]
+
     monkeypatch.setattr(overlays, "fetch_dataset", fetch)
+    monkeypatch.setattr(overlays.opendata, "open_meteo", open_meteo)
     overlays.clear_cache()
     yield calls
     overlays.clear_cache()
@@ -107,3 +117,48 @@ def test_unknown_overlay_and_cwa_failure(client, loaded, monkeypatch):
     response = client.get("/api/overlays/rain")
     assert response.status_code == 503 and "中央氣象署" in response.get_json()["error"]
     overlays.clear_cache()
+
+
+def test_wind_grid_is_east_and_north_components():
+    grid = {"lon0": 120, "lat0": 22, "step": 1, "nx": 2, "ny": 2}
+    points = parse.wind_points(grid)
+    assert points == [(22, 120), (22, 121), (23, 120), (23, 121)]
+    # From the north goes south; from the west goes east; a missing point stays missing.
+    results = [model_point(wind_speed_10m=10, wind_direction_10m=0), model_point(wind_speed_10m=4, wind_direction_10m=270),
+               model_point(wind_speed_10m=None, wind_direction_10m=None), model_point(wind_speed_10m=0, wind_direction_10m=90)]
+    field = parse.parse_wind_grid(results, grid)
+    assert field["u"][0] == pytest.approx(0) and field["v"][0] == -10
+    assert field["u"][1] == 4 and field["v"][1] == pytest.approx(0)
+    assert field["u"][2] is None and field["max"] == 10
+    assert field["time"] == "2026-09-24T14:15:00+08:00"
+    with pytest.raises(WeatherParseError):
+        parse.parse_wind_grid([model_point()], grid)
+
+
+def test_moenv_stations_skip_maintenance_and_name_counties_as_cwa_does():
+    record = {"sitename": "豐原", "county": "台中市", "aqi": "112", "pollutant": "細懸浮微粒", "status": "對敏感族群不健康",
+              "pm2.5": "41", "pm10": "60", "o3": "30.1", "longitude": "120.741711", "latitude": "24.256586",
+              "siteid": "28", "publishtime": "2026/09/24 14:00:00"}
+    payload = parse.parse_moenv_aqi({"records": [record, {**record, "aqi": "", "status": "設備維護"}]})
+    (station,) = payload["stations"]
+    assert station["county"] == "臺中市" and station["aqi"] == 112 and station["pm25"] == 41
+    assert payload["source"] == "moenv" and payload["time"] == "2026-09-24T14:00:00+08:00"
+    with pytest.raises(WeatherParseError):
+        parse.parse_moenv_aqi({"records": []})
+
+
+def test_model_air_names_the_pollutant_only_past_good():
+    places = [("臺北市", 25.0, 121.5), ("高雄市", 22.6, 120.3)]
+    results = [model_point(us_aqi=40, us_aqi_pm2_5=40, us_aqi_ozone=20),
+               model_point(us_aqi=130, us_aqi_pm2_5=90, us_aqi_ozone=130, pm2_5=30)]
+    taipei, kaohsiung = parse.parse_model_air(results, places)["stations"]
+    assert taipei["status"] == "良好" and taipei["pollutant"] is None
+    assert kaohsiung["status"] == "對敏感族群不健康" and kaohsiung["pollutant"] == "臭氧"
+
+
+def test_air_uses_moenv_when_it_has_a_key(client, loaded, fake_cwa, monkeypatch):
+    monkeypatch.setenv("MOENV_API_KEY", "key")
+    record = {"sitename": "左營", "county": "高雄市", "aqi": "55", "longitude": "120.29", "latitude": "22.67"}
+    monkeypatch.setattr(overlays.opendata, "moenv", lambda dataset: {"records": [record]})
+    air = client.get("/api/overlays/air").get_json()
+    assert air["source"] == "moenv" and air["stations"][0]["name"] == "左營"
