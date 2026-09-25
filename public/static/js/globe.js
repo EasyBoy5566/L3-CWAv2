@@ -39,6 +39,8 @@ const TOWN_LEVEL = 350000;
 const KEEP_HIGHLIGHTS = 6;
 // OSM Buildings would otherwise cache up to 512 MB of tiles.
 const BUILDING_CACHE_BYTES = 160 * 1024 * 1024;
+// Google's photographed cities default to a 1.5 GB cache.
+const PHOTOREAL_CACHE_BYTES = 400 * 1024 * 1024;
 
 function imagery(token) {
   if (token) return undefined; // Cesium ion default imagery
@@ -340,9 +342,11 @@ export async function createGlobe(element, { token, counties: countyList, onHove
 
   // ---------- picking by position, not by primitive ----------
   const lonLatAt = (position) => {
-    const cartesian = scene.mode === Cesium.SceneMode.SCENE3D
-      ? scene.globe.pick(viewer.camera.getPickRay(position), scene)
-      : viewer.camera.pickEllipsoid(position);
+    let cartesian;
+    // Under Google's mesh the globe is hidden, so the mesh itself is picked.
+    if (!scene.globe.show && scene.pickPositionSupported) cartesian = scene.pickPosition(position);
+    else if (scene.mode === Cesium.SceneMode.SCENE3D) cartesian = scene.globe.pick(viewer.camera.getPickRay(position), scene);
+    else cartesian = viewer.camera.pickEllipsoid(position);
     if (!cartesian) return null;
     const c = Cesium.Cartographic.fromCartesian(cartesian);
     return [Cesium.Math.toDegrees(c.longitude), Cesium.Math.toDegrees(c.latitude)];
@@ -458,29 +462,49 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   // at true scale. Tiles loaded while the terrain was still exaggerated kept
   // that stretch after the camera came down, and building models cannot be
   // projected into 2D at all: rendering stopped with an error.
+  // Google's photorealistic 3D Tiles (through Cesium ion) instead of OSM Buildings.
+  let photoreal = false;
+  let buildingsArePhotoreal = false;
   const updateBuildings = () => {
-    if (!buildings) return;
-    const show = buildingsWanted && !mode2D && scene.mode === Cesium.SceneMode.SCENE3D
+    const show = Boolean(buildings) && buildingsWanted && !mode2D && scene.mode === Cesium.SceneMode.SCENE3D
       && viewer.camera.positionCartographic.height < TRUE_SCALE_BELOW
       && scene.verticalExaggeration === 1;
-    if (buildings.show !== show) {
+    if (buildings && buildings.show !== show) {
       buildings.show = show;
+      scene.requestRender();
+    }
+    // Google's mesh has its own ground, which the globe's would cut through.
+    const globeShown = !(show && buildingsArePhotoreal);
+    if (scene.globe.show !== globeShown) {
+      scene.globe.show = globeShown;
       scene.requestRender();
     }
   };
   viewer.camera.changed.addEventListener(updateBuildings);
   let buildingsLoading = null;
   const loadBuildings = async () => {
-    const tileset = await Cesium.createOsmBuildingsAsync({
-      cacheBytes: BUILDING_CACHE_BYTES,
-      maximumCacheOverflowBytes: BUILDING_CACHE_BYTES / 4,
-    });
+    const google = photoreal;
+    const tileset = google
+      ? await Cesium.createGooglePhotorealistic3DTileset(
+        { onlyUsingWithGoogleGeocoder: true }, // the viewer has no geocoder
+        { cacheBytes: PHOTOREAL_CACHE_BYTES, maximumCacheOverflowBytes: PHOTOREAL_CACHE_BYTES / 4, showCreditsOnScreen: true },
+      )
+      : await Cesium.createOsmBuildingsAsync({
+        cacheBytes: BUILDING_CACHE_BYTES,
+        maximumCacheOverflowBytes: BUILDING_CACHE_BYTES / 4,
+      });
     // One pale material reads as architecture rather than a map legend.
-    tileset.style = new Cesium.Cesium3DTileStyle({ color: "color('#e8edf4', 1.0)" });
+    if (!google) tileset.style = new Cesium.Cesium3DTileStyle({ color: "color('#e8edf4', 1.0)" });
     tileset.shadows = Cesium.ShadowMode.ENABLED;
     tileset.show = false;
     scene.primitives.add(tileset);
     buildings = tileset;
+    buildingsArePhotoreal = google;
+  };
+  const dropBuildings = () => {
+    scene.primitives.remove(buildings);
+    buildings = null;
+    buildingsArePhotoreal = false;
   };
   // Switched off, the tileset is destroyed, not hidden: its tiles and their
   // textures are freed, and switching back on streams them again.
@@ -491,12 +515,17 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       buildingsLoading ??= loadBuildings().finally(() => { buildingsLoading = null; });
       await buildingsLoading;
     }
-    if (!buildingsWanted && buildings) {
-      scene.primitives.remove(buildings);
-      buildings = null;
-    }
+    if (!buildingsWanted && buildings) dropBuildings();
     updateBuildings();
     scene.requestRender();
+  };
+  // Swapping the source drops the loaded tileset; the other streams in if wanted.
+  const setPhotoreal = async (on) => {
+    if (photoreal === on) return;
+    photoreal = on;
+    await buildingsLoading;
+    if (buildings && buildingsArePhotoreal !== on) dropBuildings();
+    await setBuildings(buildingsWanted);
   };
   const applyShadows = () => {
     const on = simulating && !mode2D;
@@ -560,6 +589,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     town: (county, name) => towns.find((t) => t.county === county && t.town === name) ?? null,
 
     setBuildings,
+    setPhotoreal,
 
     /** Buildings on, and the camera low over a tall skyline (in 3D: buildings have no 2D form). */
     async showCity(city = "taipei") {

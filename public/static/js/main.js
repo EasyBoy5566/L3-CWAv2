@@ -272,6 +272,25 @@ $("buildings").addEventListener("change", async (event) => {
   }
 });
 
+// Google's photographed cities in place of the plain OSM blocks; turning it on
+// turns the buildings on too.
+$("photoreal").addEventListener("change", async (event) => {
+  const on = event.target.checked;
+  $("photoreal-note").textContent = "照片建模的城市（試用）";
+  try {
+    await state.globe?.setPhotoreal(on);
+    if (on && !$("buildings").checked) {
+      $("buildings").checked = true;
+      syncSimMode();
+      await state.globe?.setBuildings(true);
+    }
+  } catch (error) {
+    event.target.checked = false;
+    $("photoreal-note").textContent = error.message;
+    await state.globe?.setPhotoreal(false).catch(() => {});
+  }
+});
+
 
 // North, central and south: each preset turns the buildings on and flies to a skyline.
 new Segmented($("sim-cities"), {
@@ -737,6 +756,8 @@ async function start() {
     if (!state.globe.hasTerrain) {
       $("buildings").disabled = true;
       $("buildings-note").textContent = "需要 Cesium ion token";
+      $("photoreal").disabled = true;
+      $("photoreal-note").textContent = "需要 Cesium ion token";
       for (const button of $("sim-cities").querySelectorAll("button")) button.disabled = true;
     }
   } catch (error) {
