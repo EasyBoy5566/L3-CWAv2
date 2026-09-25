@@ -5,6 +5,7 @@ import { dayLabel, escapeHtml, hhmm, num } from "./format.js";
 import { GlassSelect, Segmented, ensureRefraction, prefersReducedMotion, refract, revealInline, setSky, springEasing, stretchRefraction } from "./glass.js";
 import { createGlobe } from "./globe.js";
 import { renderFreshness } from "./header.js";
+import { kindFromText } from "./icons.js";
 import { RegionView, townBody, townHead } from "./panel.js";
 import { SECTIONS, TownData } from "./town-data.js";
 import { Ticker } from "./ticker.js";
@@ -274,12 +275,15 @@ $("buildings").addEventListener("change", async (event) => {
 
 // Google's photographed cities in place of the plain OSM blocks; turning it on
 // turns the buildings on too.
+const PHOTOREAL_NOTE = "照片建模的城市（試用）";
 $("photoreal").addEventListener("change", async (event) => {
   const on = event.target.checked;
-  $("photoreal-note").textContent = "照片建模的城市（試用）";
+  // Decided now: the buildings switched off while Google loads stay off.
+  const alsoBuildings = on && !$("buildings").checked;
+  $("photoreal-note").textContent = PHOTOREAL_NOTE;
   try {
     await state.globe?.setPhotoreal(on);
-    if (on && !$("buildings").checked) {
+    if (alsoBuildings && !$("buildings").checked) {
       $("buildings").checked = true;
       syncSimMode();
       await state.globe?.setBuildings(true);
@@ -290,6 +294,24 @@ $("photoreal").addEventListener("change", async (event) => {
     await state.globe?.setPhotoreal(false).catch(() => {});
   }
 });
+
+// The weather over Google's city: the nearest station reporting within ~15 km.
+async function cityWeather(lon, lat) {
+  try {
+    const { data } = await townData.load("stations");
+    let near = null;
+    let best = 0.15 ** 2;
+    for (const station of data.stations) {
+      if (!station.wx) continue;
+      const d = (station.lon - lon) ** 2 + (station.lat - lat) ** 2;
+      if (d < best) [near, best] = [station, d];
+    }
+    state.globe?.setCityWeather(kindFromText(near?.wx) ?? "clear");
+    if ($("photoreal").checked) $("photoreal-note").textContent = near ? `${near.name}站：${near.wx}` : PHOTOREAL_NOTE;
+  } catch {
+    state.globe?.setCityWeather("clear");
+  }
+}
 
 
 // North, central and south: each preset turns the buildings on and flies to a skyline.
@@ -749,6 +771,7 @@ async function start() {
       onSelect: (name, position, town) => openRegion(name, { origin: position, town }),
       onMode: syncModeButton,
       onTyphoon: (index) => typhoonCard.focus(index),
+      onCityView: cityWeather,
     });
     typhoonCard.globe = state.globe;
     document.querySelector(".credit").hidden = true;

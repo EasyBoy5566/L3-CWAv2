@@ -2,6 +2,7 @@
 // borders draped as imagery, and a value standee for each county.
 /* global Cesium */
 import { BOUNDS, bordersCanvas, countyAt, highlightCanvas, loadCounties, loadTowns, townAt } from "./geo.js";
+import { cityShader, Rain, WEATHER } from "./city-light.js";
 import { Overlays } from "./overlays.js";
 import { Standees } from "./standees.js";
 
@@ -117,7 +118,7 @@ const idle = () => new Promise((resolve) => {
 // long: the rest stream in and sharpen while the page is already usable.
 const FIRST_VIEW_MS = 2500;
 
-export async function createGlobe(element, { token, counties: countyList, onHover, onInfo, onSelect, onMode, onTyphoon }) {
+export async function createGlobe(element, { token, counties: countyList, onHover, onInfo, onSelect, onMode, onTyphoon, onCityView }) {
   // The county geometry downloads while Cesium sets up.
   const countiesLoading = loadCounties();
   if (token) Cesium.Ion.defaultAccessToken = token;
@@ -458,13 +459,24 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   // True in 2D and throughout a morph either way: only a finished 3D scene
   // draws buildings and shadows.
   let mode2D = false;
+  // Google's photorealistic 3D Tiles (through Cesium ion) instead of OSM Buildings.
+  let photoreal = false;
+  let buildingsArePhotoreal = false;
+  // Put aside, not destroyed, when switched off: each new Google tileset is a
+  // root request against the monthly quota, and one serves for hours.
+  let googleKept = null;
+  const googleShader = cityShader();
+  const rain = new Rain(scene);
+  let weather = WEATHER.clear;
+  let googleShown = false;
+  const reportView = () => {
+    const c = viewer.camera.positionCartographic;
+    onCityView?.(Cesium.Math.toDegrees(c.longitude), Cesium.Math.toDegrees(c.latitude));
+  };
   // The buildings are drawn (and so load their tiles) only in 3D, close in,
   // at true scale. Tiles loaded while the terrain was still exaggerated kept
   // that stretch after the camera came down, and building models cannot be
   // projected into 2D at all: rendering stopped with an error.
-  // Google's photorealistic 3D Tiles (through Cesium ion) instead of OSM Buildings.
-  let photoreal = false;
-  let buildingsArePhotoreal = false;
   const updateBuildings = () => {
     const show = Boolean(buildings) && buildingsWanted && !mode2D && scene.mode === Cesium.SceneMode.SCENE3D
       && viewer.camera.positionCartographic.height < TRUE_SCALE_BELOW
@@ -474,40 +486,64 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       scene.requestRender();
     }
     // Google's mesh has its own ground, which the globe's would cut through.
-    const globeShown = !(show && buildingsArePhotoreal);
-    if (scene.globe.show !== globeShown) {
-      scene.globe.show = globeShown;
+    const google = show && buildingsArePhotoreal;
+    if (scene.globe.show !== !google) {
+      scene.globe.show = !google;
       scene.requestRender();
+    }
+    if (google !== googleShown) {
+      googleShown = google;
+      rain.show(google ? weather.rain : 0);
+      if (google) reportView();
     }
   };
   viewer.camera.changed.addEventListener(updateBuildings);
+  // The weather is looked up where the camera settles.
+  viewer.camera.moveEnd.addEventListener(() => {
+    if (googleShown) reportView();
+  });
   let buildingsLoading = null;
   const loadBuildings = async () => {
     const google = photoreal;
-    const tileset = google
-      ? await Cesium.createGooglePhotorealistic3DTileset(
+    let tileset = null;
+    if (google && googleKept) {
+      tileset = googleKept;
+      googleKept = null;
+    } else if (google) {
+      tileset = await Cesium.createGooglePhotorealistic3DTileset(
         { onlyUsingWithGoogleGeocoder: true }, // the viewer has no geocoder
         { cacheBytes: PHOTOREAL_CACHE_BYTES, maximumCacheOverflowBytes: PHOTOREAL_CACHE_BYTES / 4, showCreditsOnScreen: true },
-      )
-      : await Cesium.createOsmBuildingsAsync({
+      );
+      tileset.customShader = googleShader;
+      scene.primitives.add(tileset);
+    } else if (!tileset) {
+      tileset = await Cesium.createOsmBuildingsAsync({
         cacheBytes: BUILDING_CACHE_BYTES,
         maximumCacheOverflowBytes: BUILDING_CACHE_BYTES / 4,
       });
-    // One pale material reads as architecture rather than a map legend.
-    if (!google) tileset.style = new Cesium.Cesium3DTileStyle({ color: "color('#e8edf4', 1.0)" });
+      // One pale material reads as architecture rather than a map legend.
+      tileset.style = new Cesium.Cesium3DTileStyle({ color: "color('#e8edf4', 1.0)" });
+      scene.primitives.add(tileset);
+    }
     tileset.shadows = Cesium.ShadowMode.ENABLED;
     tileset.show = false;
-    scene.primitives.add(tileset);
     buildings = tileset;
     buildingsArePhotoreal = google;
+    applyShadows();
   };
+  // OSM Buildings are destroyed, not hidden: their tiles and textures are
+  // freed, and switching back on streams them again. Google's are kept.
   const dropBuildings = () => {
-    scene.primitives.remove(buildings);
+    if (buildingsArePhotoreal) {
+      buildings.show = false;
+      googleKept = buildings;
+    } else {
+      scene.primitives.remove(buildings);
+    }
     buildings = null;
     buildingsArePhotoreal = false;
+    applyShadows();
   };
-  // Switched off, the tileset is destroyed, not hidden: its tiles and their
-  // textures are freed, and switching back on streams them again.
   const setBuildings = async (on) => {
     if (!token) throw new Error("建築模型需要 Cesium ion token。");
     buildingsWanted = on;
@@ -527,13 +563,20 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     if (buildings && buildingsArePhotoreal !== on) dropBuildings();
     await setBuildings(buildingsWanted);
   };
+  const setCityWeather = (kind) => {
+    weather = WEATHER[kind] ?? WEATHER.clear;
+    googleShader.setUniform("u_overcast", weather.overcast);
+    googleShader.setUniform("u_fog", weather.fog);
+    rain.show(googleShown ? weather.rain : 0);
+  };
   const applyShadows = () => {
     const on = simulating && !mode2D;
     viewer.shadows = on;
     viewer.terrainShadows = on ? Cesium.ShadowMode.RECEIVE_ONLY : Cesium.ShadowMode.DISABLED;
     // Close up, a short shadow distance keeps building shadows crisp.
     viewer.shadowMap.maximumDistance = simulating ? 6000 : 20000;
-    viewer.shadowMap.darkness = simulating ? 0.35 : 0.3;
+    // The photographs already hold the day's own shadows; cast ones stay light.
+    viewer.shadowMap.darkness = !simulating ? 0.3 : buildingsArePhotoreal ? 0.6 : 0.35;
     scene.requestRender();
   };
 
@@ -590,6 +633,8 @@ export async function createGlobe(element, { token, counties: countyList, onHove
 
     setBuildings,
     setPhotoreal,
+    /** The weather laid over Google's city: a kind from icons.js kindFromText. */
+    setCityWeather,
 
     /** Buildings on, and the camera low over a tall skyline (in 3D: buildings have no 2D form). */
     async showCity(city = "taipei") {
