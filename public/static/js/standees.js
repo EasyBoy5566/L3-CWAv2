@@ -24,31 +24,11 @@ const FONT = "'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif";
 // Room around the pill for its shadow and glow, in on-screen pixels.
 const MARGIN = 8;
 
-// One sign, drawn on a canvas: a rounded glass pill with the value's colour
-// dot, the name and the value.
-function drawSign({ name, text, color, approx, selected }) {
+// The glass of a sign: a rounded pill with a soft shadow, a see-through tint,
+// a sheen, a specular spot, a glow along the bottom and a lit rim, gold when
+// selected.
+function glassPill(context, x0, y0, w, h, selected = false) {
   const s = PIXEL_RATIO;
-  const context = document.createElement("canvas").getContext("2d");
-  const nameFont = `500 ${13 * s}px ${FONT}`;
-  const valueFont = `700 ${16 * s}px ${FONT}`;
-  const smallFont = `500 ${11 * s}px ${FONT}`;
-  context.font = nameFont;
-  const nameWidth = context.measureText(name).width;
-  context.font = valueFont;
-  const valueWidth = context.measureText(text).width;
-  context.font = smallFont;
-  const approxWidth = approx ? context.measureText("約").width + 2 * s : 0;
-  const pad = 11 * s;
-  const dot = 10 * s;
-  const gap = 6 * s;
-  const h = 30 * s;
-  const w = Math.ceil(pad + dot + gap + nameWidth + gap + approxWidth + valueWidth + pad);
-  const m = MARGIN * s;
-  const canvas = context.canvas;
-  canvas.width = w + m * 2;
-  canvas.height = h + m * 2;
-  const x0 = m;
-  const y0 = m;
   const r = h / 2;
   const pill = () => {
     context.beginPath();
@@ -119,6 +99,34 @@ function drawSign({ name, text, color, approx, selected }) {
     context.stroke();
     context.restore();
   }
+}
+
+// One sign, drawn on a canvas: a rounded glass pill with the value's colour
+// dot, the name and the value.
+function drawSign({ name, text, color, approx, selected }) {
+  const s = PIXEL_RATIO;
+  const context = document.createElement("canvas").getContext("2d");
+  const nameFont = `500 ${13 * s}px ${FONT}`;
+  const valueFont = `700 ${16 * s}px ${FONT}`;
+  const smallFont = `500 ${11 * s}px ${FONT}`;
+  context.font = nameFont;
+  const nameWidth = context.measureText(name).width;
+  context.font = valueFont;
+  const valueWidth = context.measureText(text).width;
+  context.font = smallFont;
+  const approxWidth = approx ? context.measureText("約").width + 2 * s : 0;
+  const pad = 11 * s;
+  const dot = 10 * s;
+  const gap = 6 * s;
+  const h = 30 * s;
+  const w = Math.ceil(pad + dot + gap + nameWidth + gap + approxWidth + valueWidth + pad);
+  const m = MARGIN * s;
+  const canvas = context.canvas;
+  canvas.width = w + m * 2;
+  canvas.height = h + m * 2;
+  const x0 = m;
+  const y0 = m;
+  glassPill(context, x0, y0, w, h, selected);
 
   // Dot, name, value, with a faint shadow to read over bright ground.
   const cy = y0 + h / 2;
@@ -155,6 +163,38 @@ function drawSign({ name, text, color, approx, selected }) {
   context.font = valueFont;
   context.fillStyle = "#f8fafc";
   context.fillText(text, x, cy + 0.5 * s);
+  return canvas;
+}
+
+// Station names: full size from close in out to the township view (60 km),
+// then shrinking to a little over half 400 km out and no smaller, so they
+// never outgrow the township as the camera pulls back.
+export const NAME_SCALE = new Cesium.NearFarScalar(60000, 1 / PIXEL_RATIO, 400000, 0.55 / PIXEL_RATIO);
+export const NAME_OFFSET_SCALE = new Cesium.NearFarScalar(60000, 1, 400000, 0.55);
+// On-screen height of a name sign with its margin: the step when names stack.
+export const NAME_STEP = 28;
+
+/** A station's name on the same glass as the county signs, smaller. */
+export function drawNameSign(name) {
+  const s = PIXEL_RATIO;
+  const context = document.createElement("canvas").getContext("2d");
+  const font = `500 ${13 * s}px ${FONT}`;
+  context.font = font;
+  const pad = 10 * s;
+  const h = 24 * s;
+  const w = Math.ceil(pad + context.measureText(name).width + pad);
+  const m = MARGIN * s;
+  const canvas = context.canvas;
+  canvas.width = w + m * 2;
+  canvas.height = h + m * 2;
+  glassPill(context, m, m, w, h);
+  context.shadowColor = "rgba(0, 0, 0, 0.9)";
+  context.shadowBlur = 4 * s;
+  context.shadowOffsetY = 1 * s;
+  context.textBaseline = "middle";
+  context.font = font;
+  context.fillStyle = "rgba(241, 245, 249, 0.95)";
+  context.fillText(name, m + pad, m + h / 2 + 0.5 * s);
   return canvas;
 }
 

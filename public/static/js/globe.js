@@ -4,7 +4,7 @@
 import { BOUNDS, bordersCanvas, countyAt, highlightCanvas, loadCounties, loadTowns, townAt } from "./geo.js";
 import { cityShader, WEATHER } from "./city-light.js";
 import { Overlays } from "./overlays.js";
-import { Standees } from "./standees.js";
+import { NAME_OFFSET_SCALE, NAME_SCALE, NAME_STEP, Standees, drawNameSign } from "./standees.js";
 
 // The camera aims a little south of the island's centre: the tilted view
 // pushes the far north up towards the top bar.
@@ -723,7 +723,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       scene.requestRender();
     },
 
-    /** Name stations ({ name, lon, lat }) where they stand; [] clears them. */
+    /** Name stations ({ name, lon, lat }) on glass where they stand; [] clears them. */
     showStations(stations) {
       stationDots.entities.removeAll();
       const placed = [];
@@ -734,14 +734,11 @@ export async function createGlobe(element, { token, counties: countyList, onHove
         stationDots.entities.add({
           name: station.name,
           position: Cesium.Cartesian3.fromDegrees(station.lon, station.lat),
-          label: {
-            text: station.name,
-            font: "600 12px 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif",
-            fillColor: Cesium.Color.WHITE,
-            showBackground: true,
-            backgroundColor: Cesium.Color.fromCssColorString("#0b1220").withAlpha(0.62),
-            backgroundPadding: new Cesium.Cartesian2(6, 3),
-            pixelOffset: new Cesium.Cartesian2(0, 20 * below),
+          billboard: {
+            image: drawNameSign(station.name),
+            scaleByDistance: NAME_SCALE,
+            pixelOffset: new Cesium.Cartesian2(0, NAME_STEP * below),
+            pixelOffsetScaleByDistance: NAME_OFFSET_SCALE,
             heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
             disableDepthTestDistance: Number.POSITIVE_INFINITY,
           },
