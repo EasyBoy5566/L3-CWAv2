@@ -332,6 +332,12 @@ export async function createGlobe(element, { token, counties: countyList, onHove
 
   const dataLayers = new Overlays(viewer);
 
+  // The selected township's weather stations: small dots, named on hover.
+  const stationDots = new Cesium.CustomDataSource("stations");
+  viewer.dataSources.add(stationDots);
+  const stationInfo = (picked) =>
+    (picked?.id && stationDots.entities.contains(picked.id) ? { title: picked.id.name, lines: [] } : null);
+
   // ---------- picking by position, not by primitive ----------
   const lonLatAt = (position) => {
     const cartesian = scene.mode === Cesium.SceneMode.SCENE3D
@@ -374,7 +380,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
         onHover?.(standing, { x: position.x, y: position.y });
         return;
       }
-      const info = dataLayers.infoFor(picked);
+      const info = stationInfo(picked) ?? dataLayers.infoFor(picked);
       onInfo?.(info, { x: position.x, y: position.y });
       if (info) {
         scene.canvas.style.cursor = "";
@@ -583,6 +589,26 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       selected = town ? `${county}${town}` : county;
       standees.select(county);
       refreshHighlights();
+    },
+
+    /** Mark stations ({ name, lon, lat }) with small dots; [] clears them. */
+    showStations(stations) {
+      stationDots.entities.removeAll();
+      for (const station of stations) {
+        stationDots.entities.add({
+          name: station.name,
+          position: Cesium.Cartesian3.fromDegrees(station.lon, station.lat),
+          point: {
+            pixelSize: 8,
+            color: Cesium.Color.WHITE.withAlpha(0.95),
+            outlineColor: Cesium.Color.fromCssColorString("#0b1220").withAlpha(0.85),
+            outlineWidth: 2,
+            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+        });
+      }
+      scene.requestRender();
     },
 
     setSky(next) {

@@ -171,9 +171,10 @@ function showInfo(info, position) {
     if (!state.hoverCounty) card.hidden = true;
     return;
   }
+  // A station dot has only its name.
   const rows = info.lines.map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd>${value}</dd>`).join("");
-  card.innerHTML = `<strong>${escapeHtml(info.title ?? "")}</strong><div class="muted">${escapeHtml(info.sub ?? "")}</div>
-    <dl class="info-rows">${rows}</dl>`;
+  card.innerHTML = `<strong>${escapeHtml(info.title ?? "")}</strong>${info.sub ? `<div class="muted">${escapeHtml(info.sub)}</div>` : ""}
+    ${rows ? `<dl class="info-rows">${rows}</dl>` : ""}`;
   card.hidden = false;
   placeCard(card, position);
 }
@@ -446,8 +447,10 @@ async function openTownCard(town) {
   townCard.classList.remove("collapsed");
   if (!countyCard.hidden) springHeight(countyCard, countyFrom, "spring", 650);
   springHeight(townCard, townFrom, "spring", 700);
+  state.globe?.showStations([]);
   const data = await townData.forTown(town, ALL_SECTIONS);
   if (townShown !== town) return; // another township was picked meanwhile
+  state.globe?.showStations(data.stations?.all ?? []);
   townPeek(town, data.forecast?.row);
   const before = townCard.offsetHeight;
   $("town-content").innerHTML = `${townHead(town)}${townBody(data)}`;
@@ -455,6 +458,7 @@ async function openTownCard(town) {
 }
 function closeTownCard() {
   townShown = null;
+  state.globe?.showStations([]);
   if (townCard.hidden || townCard.dataset.closing) return;
   // The county's card opens again as the township's goes, unless the county
   // is going too (its region closed).

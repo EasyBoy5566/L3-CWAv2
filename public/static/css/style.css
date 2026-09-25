@@ -444,6 +444,9 @@ input[type="range"]::-moz-range-thumb {
   font-size: 13px;
 }
 .hover-card strong { font-size: 15px; display: block; }
+/* A station dot's card: just its name. */
+.hover-card:has(> strong:only-child) { min-width: 0; padding: 7px 12px; --radius: 14px; }
+.hover-card:has(> strong:only-child) strong { font-size: 14px; }
 .hover-card .value { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .hover-card .muted { color: var(--muted); }
 .info-rows { display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; margin: 8px 0 4px; font-variant-numeric: tabular-nums; }

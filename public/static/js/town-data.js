@@ -88,12 +88,14 @@ function summarise(section, rows, loaded, town) {
     }
     case "stations": {
       const reporting = rows.filter((r) => r.t !== null);
-      if (!reporting.length) return { count: rows.length, list: [] };
+      // Every station, for the dots on the map; `list` is the card's table.
+      if (!reporting.length) return { count: rows.length, all: rows, list: [] };
       const temperatures = reporting.map((r) => r.t);
       const humidities = reporting.map((r) => r.rh).filter((v) => v !== null).sort((a, b) => a - b);
       const gusts = rows.map((r) => r.gust).filter((v) => v !== null);
       return {
         count: rows.length,
+        all: rows,
         tmin: Math.min(...temperatures),
         tmax: Math.max(...temperatures),
         rh: humidities.length ? humidities[Math.floor(humidities.length / 2)] : null,

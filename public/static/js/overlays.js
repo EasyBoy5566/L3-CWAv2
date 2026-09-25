@@ -1,7 +1,8 @@
 // Map layers drawn on the globe, each one a Cesium data source built from
 // /api/overlays/<name> when its switch is turned on. Station and township
-// datasets are not drawn as points any more: they feed the township card
-// (town-data.js). The typhoon is the one dataset that belongs on the map.
+// datasets are not layers any more: they feed the township card
+// (town-data.js), and the selected township's stations are dots (globe.js).
+// The typhoon is the one dataset that belongs on the map.
 /* global Cesium */
 import { getJSON } from "./api.js";
 import { addCloudLayer, latestCloudTime } from "./clouds.js";
