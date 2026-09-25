@@ -425,6 +425,24 @@ input[type="range"]::-moz-range-thumb {
 .topbar .tools .view-btn { width: auto; display: inline-flex; align-items: center; gap: 6px; padding: 0 13px; background: var(--inner); border-color: var(--inner-line); }
 .topbar .tools .view-btn:hover { background: rgba(255, 255, 255, 0.16); }
 .view-btn svg { width: 15px; height: 15px; }
+/* The compass needle turns with the map; north up, it rests. */
+#north-needle { transform-origin: 8px 8px; }
+#locate.busy svg { animation: locating 0.9s ease-in-out infinite; }
+@keyframes locating { 50% { opacity: 0.35; transform: scale(0.8); } }
+@media (prefers-reduced-motion: reduce) { #locate.busy svg { animation: none; opacity: 0.5; } }
+/* A short message under the top bar, such as a location that could not be found. */
+.toast {
+  position: absolute;
+  top: calc(var(--top) + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 10px 16px;
+  --radius: 16px;
+  font-size: 13px;
+  text-align: center;
+}
 .page-globe .freshness { margin-left: 0; }
 .divider { width: 1px; height: 24px; background: rgba(255, 255, 255, 0.16); margin: 0 4px; }
 .stepper { display: flex; align-items: center; gap: 2px; }

@@ -118,7 +118,7 @@ const idle = () => new Promise((resolve) => {
 // long: the rest stream in and sharpen while the page is already usable.
 const FIRST_VIEW_MS = 2500;
 
-export async function createGlobe(element, { token, counties: countyList, onHover, onInfo, onSelect, onMode, onTyphoon, onCityView }) {
+export async function createGlobe(element, { token, counties: countyList, onHover, onInfo, onSelect, onMode, onTyphoon, onCityView, onHeading }) {
   // The county geometry downloads while Cesium sets up.
   const countiesLoading = loadCounties();
   if (token) Cesium.Ion.defaultAccessToken = token;
@@ -337,6 +337,18 @@ export async function createGlobe(element, { token, counties: countyList, onHove
 
   // The selected township's weather stations: small dots, named on hover.
   const stationDots = new Cesium.CustomDataSource("stations");
+  // Where the viewer is, from the browser's location: a dot and its accuracy.
+  const here = new Cesium.CustomDataSource("here");
+  viewer.dataSources.add(here);
+  // The compass needle follows the heading; renders happen only on change.
+  let reportedHeading = null;
+  scene.postRender.addEventListener(() => {
+    const heading = Cesium.Math.toDegrees(viewer.camera.heading);
+    if (reportedHeading === null || Math.abs(heading - reportedHeading) > 0.2) {
+      reportedHeading = heading;
+      onHeading?.(heading);
+    }
+  });
   viewer.dataSources.add(stationDots);
   const stationInfo = (picked) =>
     (picked?.id && stationDots.entities.contains(picked.id) ? { title: picked.id.name, lines: [] } : null);
@@ -723,6 +735,62 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     },
 
     flyHome,
+
+    /** North up, turning about the point in the middle of the view. */
+    resetNorth() {
+      const { camera } = viewer;
+      const level = { heading: 0, pitch: camera.pitch, roll: 0 };
+      if (scene.mode !== Cesium.SceneMode.SCENE3D) {
+        camera.setView({ orientation: level });
+        return;
+      }
+      const middle = new Cesium.Cartesian2(scene.canvas.clientWidth / 2, scene.canvas.clientHeight / 2);
+      const target = !scene.globe.show && scene.pickPositionSupported
+        ? scene.pickPosition(middle)
+        : scene.globe.pick(camera.getPickRay(middle), scene);
+      if (!target) {
+        camera.flyTo({ destination: camera.positionWC, orientation: level, duration: 0.8 });
+        return;
+      }
+      const range = Cesium.Cartesian3.distance(camera.positionWC, target);
+      camera.flyToBoundingSphere(new Cesium.BoundingSphere(target, 0), {
+        offset: new Cesium.HeadingPitchRange(0, camera.pitch, range),
+        duration: 0.8,
+      });
+    },
+
+    /** Mark the viewer's own position, with a ring of its accuracy in metres. */
+    showHere(lon, lat, accuracy) {
+      here.entities.removeAll();
+      const position = Cesium.Cartesian3.fromDegrees(lon, lat);
+      const blue = Cesium.Color.fromCssColorString("#3b82f6");
+      if (accuracy > 30) {
+        const radius = Math.min(accuracy, 5000);
+        here.entities.add({
+          position,
+          ellipse: { semiMajorAxis: radius, semiMinorAxis: radius, material: blue.withAlpha(0.16), heightReference: Cesium.HeightReference.CLAMP_TO_GROUND },
+        });
+      }
+      here.entities.add({
+        position,
+        point: {
+          pixelSize: 13,
+          color: blue,
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 3,
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+      });
+      scene.requestRender();
+    },
+
+    /** The county and township at a point, once the township geometry is in. */
+    async placeOf(lon, lat) {
+      await details.catch(() => {});
+      const county = countyAt(counties, lon, lat);
+      return { county, town: county ? townAt(towns, county, lon, lat) : null };
+    },
 
     // null returns to live time; a Date freezes the sun and moon at that moment.
     setTime(date) {

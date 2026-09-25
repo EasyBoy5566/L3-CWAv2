@@ -45,6 +45,12 @@
     <button type="button" class="icon-btn text view-btn" id="home" title="回到全臺視角">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5.5v-3h3M11 2.5h3v3M14 10.5v3h-3M5 13.5H2v-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="1.7" fill="currentColor"/></svg>全覽
     </button>
+    <button type="button" class="icon-btn text view-btn" id="north" title="轉回北方朝上">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.9" fill="none" stroke="currentColor" stroke-width="1.3" opacity="0.55"/><g id="north-needle"><path d="M8 2.6L10.2 8H5.8z" fill="#f87171"/><path d="M8 13.4L10.2 8H5.8z" fill="currentColor" opacity="0.75"/></g></svg>指北
+    </button>
+    <button type="button" class="icon-btn text view-btn" id="locate" title="飛到我的位置" aria-pressed="false">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="4.3" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="1.7" fill="currentColor"/><path d="M8 1v2.4M8 12.6V15M1 8h2.4M12.6 8H15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>定位
+    </button>
   </div>
 {% endblock %}
 {% block content %}
@@ -57,6 +63,7 @@
     </div>
   </div>
   <div id="fallback" class="fallback" hidden></div>
+  <div id="toast" class="toast glass" role="status" aria-live="polite" hidden></div>
 
   <div class="left-stack">
   <aside class="controls glass" data-refract aria-label="地圖圖層">

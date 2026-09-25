@@ -693,6 +693,37 @@ $("mode").addEventListener("click", async (event) => {
   }
 });
 $("home").addEventListener("click", () => state.globe?.flyHome());
+$("north").addEventListener("click", () => state.globe?.resetNorth());
+
+let toastTimer = null;
+function toast(message) {
+  const element = $("toast");
+  element.textContent = message;
+  element.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { element.hidden = true; }, 4000);
+}
+
+// The viewer's own position: a dot on the map, and in Taiwan its township's card.
+$("locate").addEventListener("click", () => {
+  const button = $("locate");
+  if (!state.globe || button.classList.contains("busy")) return;
+  if (!navigator.geolocation) return toast("這個瀏覽器不支援定位");
+  button.classList.add("busy");
+  navigator.geolocation.getCurrentPosition(async ({ coords }) => {
+    button.classList.remove("busy");
+    button.setAttribute("aria-pressed", "true");
+    const { longitude: lon, latitude: lat, accuracy } = coords;
+    state.globe.showHere(lon, lat, accuracy);
+    const { county, town } = await state.globe.placeOf(lon, lat);
+    if (county) openRegion(county, { town, fly: false });
+    else toast("你的位置不在臺灣範圍內");
+    state.globe.flyToPoint(lon, lat, { range: 8000 });
+  }, (error) => {
+    button.classList.remove("busy");
+    toast(error.code === error.PERMISSION_DENIED ? "沒有定位權限：請在瀏覽器網址列允許存取位置" : "無法取得位置，請稍後再試");
+  }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+});
 
 function showError(error) {
   const element = $("freshness");
@@ -772,6 +803,7 @@ async function start() {
       onMode: syncModeButton,
       onTyphoon: (index) => typhoonCard.focus(index),
       onCityView: cityWeather,
+      onHeading: (degrees) => { $("north-needle").style.transform = `rotate(${-degrees}deg)`; },
     });
     typhoonCard.globe = state.globe;
     document.querySelector(".credit").hidden = true;
