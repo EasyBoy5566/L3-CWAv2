@@ -6,7 +6,7 @@
 // day, gold at dusk, rose at dawn, a dim blue at night. A light touch of
 // direction (walls facing a low sun brighter) comes from each triangle's own
 // facing, since the mesh has no normals. The weather at the nearest station
-// is laid over it: overcast greys and dims, fog closes in, rain falls.
+// is laid over it: overcast greys and dims, fog closes in.
 /* global Cesium */
 
 const LIGHT = `
@@ -40,39 +40,14 @@ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
 }
 `;
 
-// Slanted streaks falling across the screen, lit by what lies behind them.
-const RAIN = `
-uniform sampler2D colorTexture;
-uniform float u_time;
-uniform float u_strength;
-in vec2 v_textureCoordinates;
-
-float hash(float x) { return fract(sin(x * 133.3) * 13.13); }
-
-void main(void) {
-  vec4 scene = texture(colorTexture, v_textureCoordinates);
-  vec2 resolution = czm_viewport.zw;
-  vec2 uv = (gl_FragCoord.xy * 2.0 - resolution) / min(resolution.x, resolution.y);
-  float a = -0.18;
-  uv = mat2(cos(a), -sin(a), sin(a), cos(a)) * uv;
-  uv *= length(uv + vec2(0.0, 4.9)) * 0.3 + 1.0;
-  float v = 1.0 - sin(hash(floor(uv.x * 100.0)) * 2.0);
-  float threshold = 0.95 + 0.03 * (1.0 - u_strength);
-  float streak = clamp(abs(sin(20.0 * u_time * v + uv.y * (5.0 / (2.0 + v)))) - threshold, 0.0, 1.0) * 20.0;
-  float light = 0.35 + 0.65 * dot(scene.rgb, vec3(0.299, 0.587, 0.114));
-  vec3 colour = scene.rgb * (1.0 - 0.18 * u_strength) + vec3(0.72, 0.8, 0.9) * v * streak * light * 0.45 * u_strength;
-  out_FragColor = vec4(colour, scene.a);
-}
-`;
-
 // What each weather kind (icons.js kindFromText) does to the city.
 export const WEATHER = {
-  clear: { overcast: 0, fog: 0, rain: 0 },
-  partly: { overcast: 0.2, fog: 0, rain: 0 },
-  cloudy: { overcast: 0.6, fog: 0.1, rain: 0 },
-  fog: { overcast: 0.4, fog: 0.65, rain: 0 },
-  rain: { overcast: 0.75, fog: 0.25, rain: 0.6 },
-  thunder: { overcast: 0.9, fog: 0.3, rain: 1 },
+  clear: { overcast: 0, fog: 0 },
+  partly: { overcast: 0.2, fog: 0 },
+  cloudy: { overcast: 0.6, fog: 0.1 },
+  fog: { overcast: 0.4, fog: 0.65 },
+  rain: { overcast: 0.75, fog: 0.25 },
+  thunder: { overcast: 0.9, fog: 0.3 },
 };
 
 export function cityShader() {
@@ -84,33 +59,4 @@ export function cityShader() {
     },
     fragmentShaderText: LIGHT,
   });
-}
-
-/** Rain over the whole view; it animates only while it is shown. */
-export class Rain {
-  constructor(scene) {
-    this.scene = scene;
-    this.strength = 0;
-    this.stage = scene.postProcessStages.add(new Cesium.PostProcessStage({
-      fragmentShader: RAIN,
-      uniforms: { u_time: () => (performance.now() / 1000) % 1000, u_strength: () => this.strength },
-    }));
-    this.stage.enabled = false;
-    this.frame = null;
-  }
-
-  show(strength) {
-    this.strength = strength;
-    const on = strength > 0;
-    this.stage.enabled = on;
-    // The scene renders only on request; falling rain needs every frame.
-    if (on && !this.frame) {
-      const tick = () => {
-        this.scene.requestRender();
-        this.frame = this.stage.enabled ? requestAnimationFrame(tick) : null;
-      };
-      this.frame = requestAnimationFrame(tick);
-    }
-    this.scene.requestRender();
-  }
 }

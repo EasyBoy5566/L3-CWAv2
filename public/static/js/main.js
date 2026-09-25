@@ -171,7 +171,6 @@ function showInfo(info, position) {
     if (!state.hoverCounty) card.hidden = true;
     return;
   }
-  // A station dot has only its name.
   const rows = info.lines.map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd>${value}</dd>`).join("");
   card.innerHTML = `<strong>${escapeHtml(info.title ?? "")}</strong>${info.sub ? `<div class="muted">${escapeHtml(info.sub)}</div>` : ""}
     ${rows ? `<dl class="info-rows">${rows}</dl>` : ""}`;

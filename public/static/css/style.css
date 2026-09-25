@@ -27,8 +27,8 @@
 
   --gap: 14px;
   --top: 76px;
-  /* The county panel is as wide as the left column. */
-  --panel-w: 272px;
+  /* The county and township cards, a little wider than the left column. */
+  --panel-w: 320px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   /* Springs, sampled from a damped oscillator: --spring overshoots about 16%
      (buttons, the segmented pill), --spring-soft about 4% (panels, cards). */
@@ -462,9 +462,6 @@ input[type="range"]::-moz-range-thumb {
   font-size: 13px;
 }
 .hover-card strong { font-size: 15px; display: block; }
-/* A station dot's card: just its name. */
-.hover-card:has(> strong:only-child) { min-width: 0; padding: 7px 12px; --radius: 14px; }
-.hover-card:has(> strong:only-child) strong { font-size: 14px; }
 .hover-card .value { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .hover-card .muted { color: var(--muted); }
 .info-rows { display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; margin: 8px 0 4px; font-variant-numeric: tabular-nums; }
@@ -1250,7 +1247,7 @@ body.page-region { background: transparent; }
 .town-panel .town-table td { padding: 6px 4px; }
 .town-panel .skeleton { height: 150px; border-radius: 18px; }
 
-/* ---------- the county panel at the left column's width (272 px) ----------
+/* ---------- the county panel in the right column (--panel-w) ----------
    The standalone region page keeps its own wide layout (.panel-body.page). */
 .panel { --radius: 26px; }
 .panel .panel-body.wx { padding: 0 12px 16px; gap: 10px; }

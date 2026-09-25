@@ -2,7 +2,7 @@
 // borders draped as imagery, and a value standee for each county.
 /* global Cesium */
 import { BOUNDS, bordersCanvas, countyAt, highlightCanvas, loadCounties, loadTowns, townAt } from "./geo.js";
-import { cityShader, Rain, WEATHER } from "./city-light.js";
+import { cityShader, WEATHER } from "./city-light.js";
 import { Overlays } from "./overlays.js";
 import { Standees } from "./standees.js";
 
@@ -338,8 +338,9 @@ export async function createGlobe(element, { token, counties: countyList, onHove
 
   const dataLayers = new Overlays(viewer);
 
-  // The selected township's weather stations: small dots, named on hover.
+  // The selected township's weather stations, each a small name where it stands.
   const stationDots = new Cesium.CustomDataSource("stations");
+  viewer.dataSources.add(stationDots);
   // Where the viewer is, from the browser's location: a dot and its accuracy.
   const here = new Cesium.CustomDataSource("here");
   viewer.dataSources.add(here);
@@ -352,9 +353,6 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       onHeading?.(heading);
     }
   });
-  viewer.dataSources.add(stationDots);
-  const stationInfo = (picked) =>
-    (picked?.id && stationDots.entities.contains(picked.id) ? { title: picked.id.name, lines: [] } : null);
 
   // ---------- picking by position, not by primitive ----------
   const lonLatAt = (position) => {
@@ -407,7 +405,7 @@ export async function createGlobe(element, { token, counties: countyList, onHove
         onHover?.(standing, { x: position.x, y: position.y });
         return;
       }
-      const info = stationInfo(picked) ?? dataLayers.infoFor(picked);
+      const info = dataLayers.infoFor(picked);
       onInfo?.(info, { x: position.x, y: position.y });
       if (info) {
         scene.canvas.style.cursor = "";
@@ -488,7 +486,6 @@ export async function createGlobe(element, { token, counties: countyList, onHove
   // root request against the monthly quota, and one serves for hours.
   let googleKept = null;
   const googleShader = cityShader();
-  const rain = new Rain(scene);
   let weather = WEATHER.clear;
   let googleShown = false;
   const reportView = () => {
@@ -515,7 +512,6 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     }
     if (google !== googleShown) {
       googleShown = google;
-      rain.show(google ? weather.rain : 0);
       updateMeshBorders();
       if (google) reportView();
     }
@@ -619,7 +615,6 @@ export async function createGlobe(element, { token, counties: countyList, onHove
     weather = WEATHER[kind] ?? WEATHER.clear;
     googleShader.setUniform("u_overcast", weather.overcast);
     googleShader.setUniform("u_fog", weather.fog);
-    rain.show(googleShown ? weather.rain : 0);
   };
   const applyShadows = () => {
     const on = simulating && !mode2D;
@@ -728,18 +723,25 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       scene.requestRender();
     },
 
-    /** Mark stations ({ name, lon, lat }) with small dots; [] clears them. */
+    /** Name stations ({ name, lon, lat }) where they stand; [] clears them. */
     showStations(stations) {
       stationDots.entities.removeAll();
+      const placed = [];
       for (const station of stations) {
+        // Stations a few hundred metres apart would print over each other: stack them.
+        const below = placed.filter((p) => Math.abs(p.lon - station.lon) < 0.005 && Math.abs(p.lat - station.lat) < 0.005).length;
+        placed.push(station);
         stationDots.entities.add({
           name: station.name,
           position: Cesium.Cartesian3.fromDegrees(station.lon, station.lat),
-          point: {
-            pixelSize: 8,
-            color: Cesium.Color.WHITE.withAlpha(0.95),
-            outlineColor: Cesium.Color.fromCssColorString("#0b1220").withAlpha(0.85),
-            outlineWidth: 2,
+          label: {
+            text: station.name,
+            font: "600 12px 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif",
+            fillColor: Cesium.Color.WHITE,
+            showBackground: true,
+            backgroundColor: Cesium.Color.fromCssColorString("#0b1220").withAlpha(0.62),
+            backgroundPadding: new Cesium.Cartesian2(6, 3),
+            pixelOffset: new Cesium.Cartesian2(0, 20 * below),
             heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
             disableDepthTestDistance: Number.POSITIVE_INFINITY,
           },
@@ -770,8 +772,8 @@ export async function createGlobe(element, { token, counties: countyList, onHove
       this.flyToPoint(town.center[0], town.center[1], { range, ...options });
     },
 
-    // The left column and the county panel are the same width, so the middle
-    // of the screen is the middle of the map left visible: no offset needed.
+    // The county panel is only 48 px wider than the left column, so the middle
+    // of the screen is within 24 px of the middle of the map left visible.
     flyToPoint(lon, lat, { range = 190000 } = {}) {
       const heading = viewer.camera.heading;
       viewer.camera.flyToBoundingSphere(
