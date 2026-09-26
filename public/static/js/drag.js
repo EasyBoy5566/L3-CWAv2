@@ -43,9 +43,11 @@ const at = (home, offset) => ({
 });
 
 class Card {
-  constructor(layout, element, { key, handles, tall = false, shift = 0, base = "", visible = () => true, carry = null }) {
-    Object.assign(this, { layout, element, handles, tall, shift, base, visible, carry });
-    this.key = `card-offset:${key}`;
+  constructor(layout, element, { key, handles, tall = false, visible = () => true, carry = null }) {
+    Object.assign(this, { layout, element, handles, tall, visible, carry });
+    // Offsets from the page's places; kept under a new name when those move
+    // (the controls and weather cards swapped sides), so old ones are forgotten.
+    this.key = `card-offset-2:${key}`;
     this.wanted = this.load(); // where it was put
     this.target = { ...this.wanted }; // where it is going
     this.pos = { ...this.wanted }; // where it is
@@ -81,14 +83,13 @@ class Card {
 
   apply() {
     const { x, y } = roomy.matches ? this.pos : { x: 0, y: 0 };
-    this.element.style.transform = `${this.base} translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`.trim();
+    this.element.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
   }
 
   /** Where the page puts the card, before any offset: layout boxes ignore transforms. */
   home() {
     const parent = this.element.offsetParent?.getBoundingClientRect() ?? { left: 0, top: 0 };
-    const width = this.element.offsetWidth;
-    return { left: parent.left + this.element.offsetLeft + this.shift * width, top: parent.top + this.element.offsetTop, width, height: this.element.offsetHeight };
+    return { left: parent.left + this.element.offsetLeft, top: parent.top + this.element.offsetTop, width: this.element.offsetWidth, height: this.element.offsetHeight };
   }
 
   shown() {
@@ -203,7 +204,7 @@ export class CardLayout {
     const card = new Card(this, element, options);
     this.cards.push(card);
     for (const el of watch) this.observer.observe(el);
-    // The typhoon card slides when the county card opens; settle once it has.
+    // The typhoon card widens when the county card closes; settle once it has.
     element.addEventListener("transitionend", (event) => { if (event.target === element) this.arrangeSoon(); });
     this.arrangeSoon();
     return card;

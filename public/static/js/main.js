@@ -11,7 +11,7 @@ import { RegionView, townBody, townHead } from "./panel.js";
 import { SECTIONS, TownData } from "./town-data.js";
 import { Ticker } from "./ticker.js";
 import { TyphoonCard } from "./typhoon.js";
-import { beaufortLevel } from "./cyclone.js";
+import { CYCLONE_KEY, beaufortLevel } from "./cyclone.js";
 import { AQI, MISSING, WIND, bandOf, colorAt, renderBands, renderLegend, scaleFor } from "./scale.js";
 
 const POLL_MS = 3 * 60 * 1000;
@@ -281,7 +281,7 @@ function syncPeek() {
 // The signs and the legend for the mode at hand.
 function applyMode() {
   const legend = $("legend");
-  legend.hidden = state.mode === "typhoon" || state.mode === "none"; // the typhoon card is its own key
+  legend.hidden = state.mode === "none";
   if (state.mode === "weather") return applyLayer();
   const signs = {};
   if (state.mode === "air") {
@@ -289,6 +289,8 @@ function applyMode() {
     for (const [county, station] of Object.entries(countyAir())) {
       signs[county] = { text: String(Math.round(station.aqi)), color: bandOf(AQI, station.aqi)[1] };
     }
+  } else if (state.mode === "typhoon") {
+    renderBands(legend, CYCLONE_KEY);
   } else if (state.mode === "wind") {
     renderBands(legend, WIND);
     for (const [county, row] of Object.entries(state.nowValues ?? {})) {
@@ -453,11 +455,11 @@ $("fallback").addEventListener("click", (event) => {
 });
 
 // ---------- the side cards ----------
-// On the left the controls; on the right the county's weather with a
+// On the right the controls; on the left the county's weather with a
 // township's under it. Every card changes height on a spring (springHeight)
 // and its glass follows every frame (stretchRefraction), for the card that
 // springs and for the one it pushes or squeezes: each side is a flex column.
-const sideCards = () => [...document.querySelectorAll(".left-stack > .glass:not([hidden]), .right-stack > .glass:not([hidden])")];
+const sideCards = () => [...document.querySelectorAll(".controls-stack > .glass:not([hidden]), .weather-stack > .glass:not([hidden])")];
 const isHeightAnimation = (a) => a.effect?.getKeyframes?.().some((k) => "height" in k);
 let following = 0;
 function followCards() {
@@ -471,7 +473,7 @@ function followCards() {
       return;
     }
     following = 0;
-    for (const card of document.querySelectorAll(".left-stack > .glass, .right-stack > .glass")) {
+    for (const card of document.querySelectorAll(".controls-stack > .glass, .weather-stack > .glass")) {
       card.classList.remove("morphing");
       if (!card.hidden) ensureRefraction(card);
     }
@@ -514,7 +516,7 @@ function springAway(card, stillWanted) {
   }, () => {});
 }
 
-// The right column is an accordion: the county card or the township card is
+// The weather column is an accordion: the county card or the township card is
 // open, the other folded to its header. A township picked opens its card
 // and folds the county's; a county picked opens the county's. Resting the
 // pointer on a folded card (or tapping its header) opens that one instead.
@@ -643,7 +645,7 @@ $("controls-peek").addEventListener("click", () => setControlsOpen(canHover || !
 // Like the controls: open while the pointer (or the keyboard) is on them, and
 // folded to their headers a moment after it leaves, or when the map is
 // dragged or tapped. Picking a county or township opens them.
-const weatherStack = document.querySelector(".right-stack");
+const weatherStack = document.querySelector(".weather-stack");
 let weatherTimer = 0;
 function setWeatherFolded(folded) {
   clearTimeout(weatherTimer);
@@ -679,19 +681,32 @@ $("globe").addEventListener("pointerdown", () => {
 function carryWeather(on) {
   const cards = [countyCard, townCard].filter((card) => !card.hidden && !card.dataset.closing);
   const from = new Map(cards.map((card) => [card, card.offsetHeight]));
-  document.querySelector(".right-stack").classList.toggle("carrying", on);
+  document.querySelector(".weather-stack").classList.toggle("carrying", on);
   for (const card of cards) springHeight(card, from.get(card), on ? "spring-soft" : "spring", on ? 420 : 700);
 }
 const cardLayout = new CardLayout();
-cardLayout.add(document.querySelector(".left-stack"), { key: "controls", handles: ".grabber, .controls-peek" }, [controls]);
-cardLayout.add(document.querySelector(".right-stack"), {
+cardLayout.add(document.querySelector(".controls-stack"), { key: "controls", handles: ".grabber, .controls-peek" }, [controls]);
+cardLayout.add(document.querySelector(".weather-stack"), {
   key: "weather",
   handles: ".grabber",
   tall: true,
   visible: () => !countyCard.hidden || !townCard.hidden,
   carry: carryWeather,
 }, [countyCard, townCard]);
-cardLayout.add($("typhoon-card"), { key: "typhoon", handles: ".grabber, .ty-head", base: "translateX(-50%)", shift: -0.5 });
+cardLayout.add($("typhoon-card"), { key: "typhoon", handles: ".grabber, .ty-head" });
+// The typhoon card, between the weather cards and the controls, is as tall
+// as the controls folded (their header and legend), open or not.
+const foldedParts = [$("controls-peek"), $("legend")];
+function syncFoldedHeight() {
+  const card = getComputedStyle(controls);
+  const legend = $("legend");
+  const edges = ["paddingTop", "paddingBottom", "borderTopWidth", "borderBottomWidth"].reduce((sum, key) => sum + parseFloat(card[key]), 0)
+    + (legend.hidden ? 0 : parseFloat(getComputedStyle(legend).marginTop));
+  const height = foldedParts.reduce((sum, part) => sum + part.offsetHeight, edges);
+  document.documentElement.style.setProperty("--controls-folded", `${Math.round(height)}px`);
+}
+const foldedObserver = new ResizeObserver(syncFoldedHeight);
+for (const part of foldedParts) foldedObserver.observe(part);
 document.addEventListener("pointerdown", (event) => {
   if (canHover || !controls.classList.contains("open")) return;
   if (!controls.contains(event.target) && !event.target.closest?.(".gselect-menu")) setControlsOpen(false);

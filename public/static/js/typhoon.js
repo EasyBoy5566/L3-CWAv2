@@ -1,6 +1,6 @@
-// The typhoon card, kept to three rows: the cyclone, four numbers (how close
-// its gale circle is to Taiwan, wind, pressure, movement), and a timeline that
-// walks a marker along its analysed track and its forecast. Everything else is
+// The typhoon card, a long bar of two rows: the cyclone and four numbers (how
+// close its gale circle is to Taiwan, wind, pressure, movement), then a
+// timeline that walks a marker along its analysed track and its forecast. Everything else is
 // in the hover card of each track point on the map.
 import { beaufortLevel, cycloneClass, directionName, pointAt, timeline } from "./cyclone.js";
 import { escapeHtml } from "./format.js";
@@ -116,9 +116,9 @@ export class TyphoonCard {
           <span>${sub}</span>
         </div>
         ${tabs}
+        <div class="ty-stats"></div>
         <button type="button" class="card-close ty-close" aria-label="關閉颱風路徑" title="關閉颱風路徑"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
       </div>
-      <div class="ty-stats"></div>
       <div class="ty-time">
         <button type="button" class="ty-play" aria-label="播放颱風路徑" title="播放颱風路徑">${PLAY}</button>
         <div class="ty-scale">

@@ -11,6 +11,13 @@ const CLASSES = [
   { name: "強烈颱風", below: Infinity, color: "#f43f5e" },
 ];
 
+/** The classes as a key (scale.js renderBands): the track's colours, by name. */
+export const CYCLONE_KEY = {
+  title: "颱風強度",
+  bands: CLASSES.map((c) => [c.below, c.color]),
+  ticks: ["熱帶低壓", "輕度", "中度", "強烈"],
+};
+
 export function cycloneClass(wind) {
   if (wind === null || wind === undefined) return CLASSES[0];
   return CLASSES.find((c) => wind < c.below);
