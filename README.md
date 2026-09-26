@@ -8,6 +8,8 @@
 
 ![點選臺中市：縣市天氣卡片與沿山脊發光的縣界](docs/screenshot-county.jpg)
 
+![3D模型太陽光線模擬](docs/screenshot_sunlight..jpg)
+
 資料來自[中央氣象署開放資料平臺](https://opendata.cwa.gov.tw/)，每 10 分鐘自動更新，存放在 SQLite（正式環境使用 Turso 託管的 libSQL）。
 
 ```text
