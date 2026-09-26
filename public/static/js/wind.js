@@ -17,17 +17,17 @@ import { WIND, bandOf } from "./scale.js";
 // How much each band stands out, from calm (0) to 6 級 and up (1).
 const BAND_RAMP = [0, 0.15, 0.35, 0.5, 0.7, 0.85, 1, 1];
 // By day the imagery is busy and every line needs its strength; at night the
-// map is dark and bright lines glare, so calm wind all but disappears and
-// only strong wind is drawn near full. A band's opacity is
+// map is dark and bright lines glare, so calm wind is drawn fainter and
+// strong wind leads, but every line still reads. A band's opacity is
 // alpha × (floor + (1 − floor) × ramp). `trail` is how many places a
 // particle's line runs back over.
 const SKY = {
-  day: { alpha: 1, floor: 0.55, width: 1.5, trail: 26 },
-  dusk: { alpha: 0.85, floor: 0.35, width: 1.3, trail: 22 },
-  night: { alpha: 0.65, floor: 0.2, width: 1.1, trail: 18 },
+  day: { alpha: 1, floor: 0.55, width: 1.5, trail: 40 },
+  dusk: { alpha: 0.9, floor: 0.45, width: 1.4, trail: 40 },
+  night: { alpha: 0.85, floor: 0.4, width: 1.3, trail: 40 },
 };
 // A trail in four parts, head to tail, each fainter than the one before.
-const AGE_ALPHA = [1, 0.66, 0.4, 0.18];
+const AGE_ALPHA = [1, 0.75, 0.5, 0.25];
 // When the camera moves, this many of a trail's places are projected again;
 // the rest grow back as the particle moves on.
 const KEEP_ON_MOVE = 3;
@@ -171,7 +171,7 @@ export class WindField {
     p.lon = a.west + Math.random() * (a.east - a.west);
     p.lat = a.south + Math.random() * (a.north - a.south);
     p.age = 0;
-    p.life = 40 + Math.random() * 60;
+    p.life = 60 + Math.random() * 80; // long enough for the trail to reach its length
     forget(p);
   }
 

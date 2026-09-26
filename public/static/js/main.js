@@ -673,7 +673,7 @@ $("globe").addEventListener("pointerdown", () => {
 });
 
 // The cards can be moved, and share the screen without overlapping
-// (drag.js), but for the controls, which may lie over the weather cards: the controls by their grip or header, the weather cards and the
+// (drag.js): the controls by their grip or header, the weather cards and the
 // typhoon card by their grips. Carried, the weather cards fold to their
 // headers; let go, they open again.
 function carryWeather(on) {
@@ -683,7 +683,7 @@ function carryWeather(on) {
   for (const card of cards) springHeight(card, from.get(card), on ? "spring-soft" : "spring", on ? 420 : 700);
 }
 const cardLayout = new CardLayout();
-cardLayout.add(document.querySelector(".left-stack"), { key: "controls", handles: ".grabber, .controls-peek", over: ["weather"] }, [controls]);
+cardLayout.add(document.querySelector(".left-stack"), { key: "controls", handles: ".grabber, .controls-peek" }, [controls]);
 cardLayout.add(document.querySelector(".right-stack"), {
   key: "weather",
   handles: ".grabber",
