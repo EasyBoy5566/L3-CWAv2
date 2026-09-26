@@ -85,7 +85,6 @@ function applyLayer() {
 // is open fades the new county's weather in.
 function revealPanel() {
   const opening = countyCard.hidden || Boolean(countyCard.dataset.closing);
-  document.body.classList.add("panel-open");
   if (!opening) {
     if (prefersReducedMotion()) return;
     $("panel-body").classList.remove("swapping");
@@ -99,7 +98,6 @@ function revealPanel() {
 }
 
 function hidePanel() {
-  document.body.classList.remove("panel-open");
   springAway(countyCard, () => Boolean(state.region));
 }
 

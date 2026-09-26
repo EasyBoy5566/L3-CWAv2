@@ -204,7 +204,7 @@ export class CardLayout {
     const card = new Card(this, element, options);
     this.cards.push(card);
     for (const el of watch) this.observer.observe(el);
-    // The typhoon card widens when the county card closes; settle once it has.
+    // A card moved by a CSS transition settles once it has.
     element.addEventListener("transitionend", (event) => { if (event.target === element) this.arrangeSoon(); });
     this.arrangeSoon();
     return card;
