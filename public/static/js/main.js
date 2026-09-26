@@ -2,7 +2,7 @@
 import { getJSON } from "./api.js";
 import { loadECharts } from "./charts.js";
 import { dayLabel, escapeHtml, hhmm, num, windText } from "./format.js";
-import { GlassSelect, Segmented, ensureRefraction, prefersReducedMotion, refract, revealInline, setSky, springEasing, stretchRefraction } from "./glass.js";
+import { GlassSelect, Segmented, ensureRefraction, prefersReducedMotion, refract, reveal, revealInline, setSky, springEasing, stretchRefraction, vanish } from "./glass.js";
 import { CardLayout } from "./drag.js";
 import { createGlobe } from "./globe.js";
 import { renderFreshness } from "./header.js";
@@ -171,18 +171,19 @@ function placeCard(card, position) {
   card.style.top = `${Math.min(position.y + 18, stage.height - card.offsetHeight - 10)}px`;
 }
 
-// The typhoon under the pointer takes the card from the county.
+// The typhoon under the pointer takes the card from the county. The card
+// pops in and fades out quickly (glass.js vanish), leaving no trail behind.
 function showInfo(info, position) {
   state.info = info;
   const card = $("hover");
   if (!info) {
-    if (!state.hoverCounty) card.hidden = true;
+    if (!state.hoverCounty) vanish(card, { duration: 160 });
     return;
   }
   const rows = info.lines.map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd>${value}</dd>`).join("");
   card.innerHTML = `<strong>${escapeHtml(info.title ?? "")}</strong>${info.sub ? `<div class="muted">${escapeHtml(info.sub)}</div>` : ""}
     ${rows ? `<dl class="info-rows">${rows}</dl>` : ""}`;
-  card.hidden = false;
+  reveal(card);
   placeCard(card, position);
 }
 
@@ -191,7 +192,7 @@ function showHover(name, position, town = null) {
   if (state.info) return;
   const card = $("hover");
   if (!name) {
-    card.hidden = true;
+    vanish(card, { duration: 160 });
     return;
   }
   const forecast = town ? townData.peekForecast(town.county, town.town) : null;
@@ -200,7 +201,7 @@ function showHover(name, position, town = null) {
       ? `<div class="value">${num(forecast.t, 0, "°C")}</div><div>${escapeHtml(forecast.wx ?? "")}${forecast.pop === null ? "" : ` · 降雨 ${num(forecast.pop)}%`}</div><div class="muted">鄉鎮逐時預報</div>`
       : "";
     card.innerHTML = `<strong>${escapeHtml(town.town)}</strong><div class="muted">${escapeHtml(name)}</div>${body}<div class="muted">點擊查看鄉鎮資料</div>`;
-    card.hidden = false;
+    reveal(card);
     placeCard(card, position);
     return;
   }
@@ -230,7 +231,7 @@ function showHover(name, position, town = null) {
       <div class="muted">${dayLabel(state.date)} 預報</div>`;
   }
   card.innerHTML = `<strong>${escapeHtml(name)}</strong>${body}<div class="muted">點擊查看詳細</div>`;
-  card.hidden = false;
+  reveal(card);
   placeCard(card, position);
 }
 
@@ -304,6 +305,9 @@ async function setMode(mode) {
   const previous = state.mode;
   state.mode = mode;
   for (const input of document.querySelectorAll('input[name="mode"]')) input.checked = input.value === mode;
+  // The controls spring to their new size as the weather options and the
+  // legend come and go.
+  const from = controls.offsetHeight;
   $("weather-options").hidden = mode !== "weather";
   syncPeek();
   syncStepper();
@@ -313,6 +317,7 @@ async function setMode(mode) {
     state.globe?.setOverlay(previous, false);
   }
   applyMode();
+  springHeight(controls, from, "spring-soft", 520);
   if (!OVERLAY_MODES.includes(mode)) return;
   // The typhoon takes the map: the county and township cards step aside.
   if (mode === "typhoon" && state.region) closeRegion();
@@ -854,9 +859,9 @@ let toastTimer = null;
 function toast(message) {
   const element = $("toast");
   element.textContent = message;
-  element.hidden = false;
+  reveal(element);
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { element.hidden = true; }, 4000);
+  toastTimer = setTimeout(() => vanish(element, { drift: [0, -10] }), 4000);
 }
 
 // The viewer's own position: a dot on the map, and in Taiwan its township's

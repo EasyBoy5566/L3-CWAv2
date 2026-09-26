@@ -4,6 +4,7 @@
 // in the hover card of each track point on the map.
 import { beaufortLevel, cycloneClass, directionName, pointAt, timeline } from "./cyclone.js";
 import { escapeHtml } from "./format.js";
+import { reveal, vanish } from "./glass.js";
 
 const HOUR = 3600 * 1000;
 const PLAY_STEP_MS = 60; // one hour of the track per frame step
@@ -51,13 +52,14 @@ export class TyphoonCard {
     const name = this.cyclone?.name;
     this.index = Math.max(0, cyclones.findIndex((c) => c.name === name));
     this.render();
-    this.root.hidden = false;
+    reveal(this.root);
   }
 
+  // It rises back into the glass it dropped from.
   hide() {
     this.pause();
     this.globe?.scrubTyphoon(this.index, null);
-    this.root.hidden = true;
+    vanish(this.root, { drift: [0, -14], duration: 300 });
   }
 
   /** Pick cyclone `index` (a click on it on the map). */
@@ -67,7 +69,7 @@ export class TyphoonCard {
     this.index = index;
     this.hours = 0;
     this.render();
-    this.root.hidden = false;
+    reveal(this.root);
     const now = this.cyclone.track.at(-1);
     this.globe?.flyToTyphoon(now.lon, now.lat);
   }

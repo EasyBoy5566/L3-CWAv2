@@ -322,6 +322,38 @@ export const springEasing = (name = "spring") => {
 };
 
 /**
+ * Hide a floating card as the glass takes it back: its entrance in reverse,
+ * quicker and without the bounce, so leaving does not hold the eye. It
+ * fades, shrinks a little towards its transform-origin and drifts back the
+ * way it came (`drift`, px), then is hidden. `reveal` stops it leaving.
+ */
+const leaving = new WeakMap();
+export function vanish(element, { drift = [0, 0], duration = 260 } = {}) {
+  if (element.hidden || leaving.has(element)) return;
+  if (reducedMotion.matches) {
+    element.hidden = true;
+    return;
+  }
+  const animation = element.animate(
+    [{ opacity: 1, scale: 1, translate: "0 0" }, { opacity: 0, scale: 0.94, translate: `${drift[0]}px ${drift[1]}px` }],
+    { duration, easing: "cubic-bezier(.4, 0, 1, 1)", fill: "forwards" },
+  );
+  leaving.set(element, animation);
+  animation.finished.then(() => {
+    leaving.delete(element);
+    element.hidden = true;
+    animation.cancel();
+  }, () => {});
+}
+
+/** Show a card; one on its way out stays, as it was. */
+export function reveal(element) {
+  leaving.get(element)?.cancel();
+  leaving.delete(element);
+  element.hidden = false;
+}
+
+/**
  * Show or hide an item in a row without shoving its neighbours: its width,
  * padding and the gap before it grow from nothing on a spring (or shrink
  * away), so the items beside it glide over instead of jumping.

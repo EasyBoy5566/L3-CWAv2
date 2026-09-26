@@ -1232,7 +1232,9 @@ body.page-region { background: transparent; }
 .toggle:active input:checked + .switch-track .switch-thumb { transform: translateX(10px); }
 
 /* Sheets and cards condense out of the glass: scale up from below (the
-   typhoon card, at the top, from above) and settle. */
+   typhoon card and the toast, at the top, from above) and settle. They
+   leave the same way in reverse, quicker and without the bounce (glass.js
+   vanish). */
 @keyframes liquid-in {
   from { opacity: 0; scale: 0.88; translate: 0 20px; }
   35% { opacity: 1; }
@@ -1245,6 +1247,7 @@ body.page-region { background: transparent; }
   from { opacity: 0; scale: 0.9; }
 }
 .typhoon-card:not([hidden]) { animation: liquid-drop 0.75s var(--spring-soft) both; transform-origin: 50% 0; }
+.toast:not([hidden]) { animation: liquid-drop 0.6s var(--spring-soft) both; transform-origin: 50% 0; }
 .hover-card:not([hidden]) { animation: liquid-pop 0.4s var(--spring) both; transform-origin: 0 0; }
 .loading-card { animation: liquid-in 0.8s var(--spring-soft) both; }
 
@@ -1252,7 +1255,7 @@ body.page-region { background: transparent; }
   .icon-btn, .chip, .now-btn, .ty-play, .gselect-trigger, .switch-thumb { transition-duration: 0.01s; }
   .icon-btn:hover, .chip:hover, .now-btn:hover, .ty-play:hover, .gselect-trigger:hover,
   .icon-btn:active, .chip:active, .now-btn:active, .ty-play:active, .gselect-trigger:active { transform: none; }
-  .typhoon-card:not([hidden]), .hover-card:not([hidden]), .loading-card { animation: none; }
+  .typhoon-card:not([hidden]), .toast:not([hidden]), .hover-card:not([hidden]), .loading-card { animation: none; }
 }
 
 /* ==========================================================================
